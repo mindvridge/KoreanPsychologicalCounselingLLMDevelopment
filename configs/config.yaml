@@ -1,0 +1,104 @@
+# 한국형 심리상담 LLM 설정 파일
+
+# 모델 설정
+model:
+  name: "beomi/OPEN-SOLAR-KO-10.7B"
+  cache_dir: "./models"
+  quantization:
+    enabled: true
+    bits: 4
+    use_double_quant: true
+    quant_type: "nf4"
+  device_map: "auto"
+  torch_dtype: "float16"
+
+# 생성 파라미터
+generation:
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  max_new_tokens: 512
+  repetition_penalty: 1.1
+  do_sample: true
+  num_beams: 1
+
+# 대화 관리
+conversation:
+  max_turns: 10
+  summary_threshold: 8
+  context_window: 2048
+  enable_history: true
+
+# 페르소나 설정
+persona:
+  name: "마음이"
+  role: "디지털 심리상담 도우미"
+  tone: "warm_professional"
+  language: "ko"
+  formality: "polite"  # 존댓말 사용
+
+# 안전 시스템
+safety:
+  enable_crisis_detection: true
+  crisis_threshold: 0.8
+  keywords_file: "./data/crisis_keywords.json"
+  alert_level:
+    high: 0.9
+    medium: 0.7
+    low: 0.5
+
+# 감정 분석
+emotion:
+  enabled: true
+  categories:
+    - "불안"
+    - "우울"
+    - "분노"
+    - "기쁨"
+    - "슬픔"
+    - "중립"
+  analysis_method: "keyword_and_context"
+
+# 치료 접근법
+therapeutic_approach:
+  primary: "person_centered"  # 내담자 중심
+  integrative:
+    - "CBT"  # 인지행동치료
+    - "ACT"  # 수용전념치료
+    - "mindfulness"  # 마음챙김
+  cultural_adaptation: true
+
+# 한국 문화 맥락
+cultural_context:
+  consider_face_saving: true  # 체면 고려
+  collectivism_awareness: true  # 집단주의 인식
+  family_dynamics: true  # 가족 역학 고려
+  work_culture: true  # 직장 문화 이해
+
+# 로깅 설정
+logging:
+  level: "INFO"
+  file: "./logs/korean_mental_health_llm.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  rotation: "100 MB"
+  retention: "30 days"
+
+# 응급 연락처
+emergency_contacts:
+  suicide_prevention: "1393"
+  mental_health_hotline: "1577-0199"
+  youth_counseling: "1388"
+  women_hotline: "1366"
+
+# 데이터 파일 경로
+data_paths:
+  crisis_keywords: "./data/crisis_keywords.json"
+  therapeutic_responses: "./data/therapeutic_responses.json"
+
+# 웹 인터페이스 (Gradio)
+web_interface:
+  enabled: true
+  host: "0.0.0.0"
+  port: 7860
+  share: false
+  theme: "soft"

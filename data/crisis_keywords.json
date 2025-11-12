@@ -1,0 +1,196 @@
+{
+  "crisis_categories": {
+    "suicide": {
+      "severity": "critical",
+      "keywords": [
+        "죽고 싶",
+        "자살",
+        "목숨",
+        "자해",
+        "죽어버리",
+        "사라지고 싶",
+        "끝내고 싶",
+        "살 가치",
+        "살아갈 이유",
+        "더 이상 못 살",
+        "죽는 게 나을",
+        "유서",
+        "수면제",
+        "투신",
+        "뛰어내리",
+        "극단적",
+        "자살 생각"
+      ],
+      "emergency_response": true,
+      "hotline": "1393"
+    },
+    "self_harm": {
+      "severity": "high",
+      "keywords": [
+        "자해",
+        "칼로",
+        "긋",
+        "베",
+        "상처",
+        "피",
+        "팔뚝",
+        "손목",
+        "자상",
+        "스스로 해치"
+      ],
+      "emergency_response": true,
+      "hotline": "1577-0199"
+    },
+    "severe_depression": {
+      "severity": "high",
+      "keywords": [
+        "무기력",
+        "의욕 없",
+        "아무것도 못하",
+        "희망 없",
+        "절망",
+        "무의미",
+        "공허",
+        "좌절",
+        "우울증",
+        "잠만 자",
+        "일어날 수 없",
+        "먹지 않"
+      ],
+      "emergency_response": false,
+      "recommend_professional": true
+    },
+    "anxiety_panic": {
+      "severity": "medium",
+      "keywords": [
+        "공황",
+        "숨을 쉴 수 없",
+        "심장이 터질",
+        "불안 발작",
+        "공포",
+        "떨림",
+        "식은땀",
+        "가슴 답답",
+        "패닉",
+        "극심한 불안"
+      ],
+      "emergency_response": false,
+      "recommend_professional": true
+    },
+    "trauma": {
+      "severity": "high",
+      "keywords": [
+        "트라우마",
+        "악몽",
+        "플래시백",
+        "성폭력",
+        "성추행",
+        "학대",
+        "폭력",
+        "괴롭힘",
+        "따돌림",
+        "가스라이팅",
+        "PTSD"
+      ],
+      "emergency_response": false,
+      "recommend_professional": true
+    },
+    "substance_abuse": {
+      "severity": "high",
+      "keywords": [
+        "술을 끊을 수 없",
+        "알코올",
+        "약물",
+        "중독",
+        "마약",
+        "환각",
+        "술에 의존",
+        "약에 의존"
+      ],
+      "emergency_response": false,
+      "recommend_professional": true
+    },
+    "domestic_violence": {
+      "severity": "critical",
+      "keywords": [
+        "가정폭력",
+        "맞고 있",
+        "폭행",
+        "구타",
+        "때리",
+        "학대당하",
+        "폭력적인 배우자",
+        "폭력적인 부모"
+      ],
+      "emergency_response": true,
+      "hotline": "1366"
+    }
+  },
+  "context_modifiers": {
+    "negation": [
+      "아니",
+      "않",
+      "없",
+      "절대",
+      "안 ",
+      "못 "
+    ],
+    "past_tense": [
+      "했었",
+      "였었",
+      "던",
+      "이었"
+    ],
+    "hypothetical": [
+      "만약",
+      "가정",
+      "만일",
+      "~면"
+    ]
+  },
+  "severity_levels": {
+    "critical": {
+      "score": 1.0,
+      "action": "immediate_intervention"
+    },
+    "high": {
+      "score": 0.8,
+      "action": "urgent_referral"
+    },
+    "medium": {
+      "score": 0.6,
+      "action": "professional_recommendation"
+    },
+    "low": {
+      "score": 0.4,
+      "action": "supportive_monitoring"
+    }
+  },
+  "emergency_resources": {
+    "suicide_prevention": {
+      "name": "자살예방상담전화",
+      "number": "1393",
+      "available": "24시간"
+    },
+    "mental_health_hotline": {
+      "name": "정신건강위기상담전화",
+      "number": "1577-0199",
+      "available": "24시간"
+    },
+    "youth_counseling": {
+      "name": "청소년전화",
+      "number": "1388",
+      "available": "24시간"
+    },
+    "women_hotline": {
+      "name": "여성긴급전화",
+      "number": "1366",
+      "available": "24시간"
+    },
+    "child_abuse": {
+      "name": "아동학대신고",
+      "number": "112",
+      "available": "24시간"
+    }
+  }
+}
