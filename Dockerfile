@@ -1,79 +1,137 @@
-# 한국형 심리상담 LLM Dockerfile
-# RTX A100 (80GB) GPU 환경 최적화
+# Multi-stage build for Korean Mental Health LLM
+# Optimized for production deployment with GPU support
 
-# NVIDIA CUDA 기반 이미지 사용
-FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+# ============================================================================
+# Stage 1: Base image with CUDA and Python
+# ============================================================================
+FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04 AS base
 
-# 메타데이터
-LABEL maintainer="Korean Mental Health LLM Team"
-LABEL description="Korean Mental Health Counseling LLM with SOLAR-Ko-10.7B"
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# 환경 변수 설정
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
-ENV CUDA_VISIBLE_DEVICES=0
-
-# 작업 디렉토리 설정
-WORKDIR /app
-
-# 시스템 패키지 업데이트 및 필수 도구 설치
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3.10 \
     python3-pip \
-    python3-dev \
-    git \
-    wget \
     curl \
-    vim \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Python 심볼릭 링크 생성
-RUN ln -s /usr/bin/python3.10 /usr/bin/python
+# Create non-root user for security
+RUN useradd -m -u 1000 -s /bin/bash llmuser
 
-# pip 업그레이드
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+WORKDIR /app
 
-# requirements.txt 복사 및 패키지 설치
+# ============================================================================
+# Stage 2: Dependencies installation
+# ============================================================================
+FROM base AS dependencies
+
+# Copy requirements first for better caching
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# 프로젝트 파일 복사
-COPY . .
+# Install Python dependencies
+RUN pip3 install --no-cache-dir -r requirements.txt
 
-# 모델 캐시 디렉토리 생성
-RUN mkdir -p /app/models /app/logs /app/data
+# Download and cache Korean embedding model
+RUN python3 -c "from sentence_transformers import SentenceTransformer; \
+    model = SentenceTransformer('jhgan/ko-sroberta-multitask'); \
+    model.save('/models/ko-sroberta-multitask')"
 
-# 권한 설정
-RUN chmod -R 755 /app
+# ============================================================================
+# Stage 3: Application
+# ============================================================================
+FROM base AS application
 
-# 포트 노출
-# Gradio: 7860
-# API (FastAPI): 8000
+# Copy installed packages from dependencies stage
+COPY --from=dependencies /usr/local/lib/python3.10/dist-packages /usr/local/lib/python3.10/dist-packages
+COPY --from=dependencies /models /models
+
+# Copy application code
+COPY --chown=llmuser:llmuser . /app
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data /app/backups /app/cache && \
+    chown -R llmuser:llmuser /app
+
+# Switch to non-root user
+USER llmuser
+
+# Set environment variables
+ENV TRANSFORMERS_CACHE=/app/cache \
+    HF_HOME=/app/cache \
+    SENTENCE_TRANSFORMERS_HOME=/models \
+    MODEL_CACHE_DIR=/models \
+    LOG_DIR=/app/logs \
+    DATA_DIR=/app/data \
+    BACKUP_DIR=/app/backups
+
+# Expose ports
 EXPOSE 7860 8000
 
-# 헬스체크
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:7860/ || exit 1
+    CMD curl -f http://localhost:7860/health || exit 1
 
-# 환경 변수 파일 로드를 위한 엔트리포인트 스크립트 생성
-RUN echo '#!/bin/bash\n\
-if [ -f .env ]; then\n\
-    export $(cat .env | grep -v "^#" | xargs)\n\
-fi\n\
-exec "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
+# Default command
+CMD ["python3", "src/api.py"]
 
-ENTRYPOINT ["/entrypoint.sh"]
+# ============================================================================
+# Stage 4: Production (final stage)
+# ============================================================================
+FROM application AS production
 
-# 기본 실행 명령 (Gradio 웹 인터페이스)
-# 다른 실행 방법:
-# - API 서버: docker run -p 8000:8000 image_name python -m uvicorn api:app --host 0.0.0.0 --port 8000
-# - CLI: docker run -it image_name python -m src.main
-CMD ["python", "-m", "gradio", "app.py"]
+# Additional production optimizations
+ENV CUDA_VISIBLE_DEVICES=0 \
+    GRADIO_SERVER_NAME=0.0.0.0 \
+    GRADIO_SERVER_PORT=7860
 
-# Docker 빌드 명령:
-# docker build -t korean-mental-health-llm:latest .
+# Copy startup script
+COPY --chown=llmuser:llmuser scripts/start.sh /app/scripts/start.sh
+RUN chmod +x /app/scripts/start.sh
 
-# Docker 실행 명령 (GPU 사용):
-# docker run --gpus all -p 7860:7860 -v $(pwd)/models:/app/models korean-mental-health-llm:latest
+ENTRYPOINT ["/app/scripts/start.sh"]
 
-# Docker Compose 사용 권장 (별도 docker-compose.yml 파일 참조)
+# ============================================================================
+# Development stage (optional)
+# ============================================================================
+FROM application AS development
+
+USER root
+
+# Install development tools
+RUN apt-get update && apt-get install -y \
+    vim \
+    htop \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir \
+    pytest \
+    pytest-cov \
+    pytest-asyncio \
+    black \
+    flake8 \
+    mypy
+
+USER llmuser
+
+CMD ["python3", "app.py"]
+
+# ============================================================================
+# Build instructions:
+#
+# Production:
+#   docker build --target production -t korean-mental-health-llm:latest .
+#
+# Development:
+#   docker build --target development -t korean-mental-health-llm:dev .
+#
+# Run:
+#   docker run --gpus all -p 7860:7860 -p 8000:8000 \
+#     -v $(pwd)/models:/app/models \
+#     -v $(pwd)/logs:/app/logs \
+#     korean-mental-health-llm:latest
+# ============================================================================
