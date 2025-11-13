@@ -251,6 +251,80 @@ class PersonaWeightAdjustment(Base):
         return f"<PersonaWeightAdjustment(persona={self.persona_id}, concern={self.concern}, weight={self.final_weight:.2f})>"
 
 
+class UserPersonaPreference(Base):
+    """
+    사용자별 페르소나 선호도
+
+    개인화된 추천을 위한 사용자별 페르소나 선호도 학습
+    """
+    __tablename__ = "user_persona_preferences"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    persona_id = Column(String(50), nullable=False, index=True)
+
+    # 개인 선호도 메트릭
+    total_sessions = Column(Integer, default=0)  # 총 상담 세션 수
+    total_feedback_count = Column(Integer, default=0)  # 피드백 수
+    average_rating = Column(Float, default=0.0)  # 평균 평점
+    preference_score = Column(Float, default=0.0)  # 선호도 점수 (-1 to +1)
+
+    # 성공 통계
+    successful_sessions = Column(Integer, default=0)  # 성공 세션 (rating >= 4)
+    success_rate = Column(Float, default=0.0)  # 성공률
+
+    # 개인화 가중치
+    personal_weight_adjustment = Column(Float, default=0.0)  # 개인 가중치 조정값
+    confidence = Column(Float, default=0.0)  # 신뢰도 (0-1)
+
+    # 시간 정보
+    first_interaction = Column(DateTime, default=datetime.utcnow)
+    last_interaction = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship
+    user = relationship("User")
+
+    def __repr__(self):
+        return f"<UserPersonaPreference(user_id={self.user_id}, persona={self.persona_id}, score={self.preference_score:.2f})>"
+
+
+class UserInteractionHistory(Base):
+    """
+    사용자 상호작용 이력
+
+    페르소나와의 상호작용 패턴 추적
+    """
+    __tablename__ = "user_interaction_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    session_id = Column(String(64), nullable=False, index=True)
+    persona_id = Column(String(50), nullable=False, index=True)
+
+    # 상호작용 정보
+    interaction_type = Column(String(20), nullable=False)  # chat, feedback, recommendation
+    duration_seconds = Column(Integer)  # 세션 길이
+    message_count = Column(Integer)  # 메시지 수
+
+    # 결과
+    rating = Column(Integer)  # 평점 (1-5)
+    helpful = Column(Boolean)  # 도움이 되었는가
+    completed = Column(Boolean, default=True)  # 완료 여부
+
+    # 컨텍스트
+    concerns = Column(JSON)  # 고민 리스트
+    user_age_range = Column(String(20))  # 나이대
+
+    # 시간 정보
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # Relationship
+    user = relationship("User")
+
+    def __repr__(self):
+        return f"<UserInteractionHistory(user_id={self.user_id}, persona={self.persona_id}, type={self.interaction_type})>"
+
+
 # ============================================================================
 # Database Connection
 # ============================================================================
@@ -901,6 +975,335 @@ class PersonaFeedbackManager:
             }
             for adj in adjustments
         ]
+
+
+# ============================================================================
+# User Personalization Management
+# ============================================================================
+
+class UserPersonalizationManager:
+    """사용자별 개인화 관리"""
+
+    @staticmethod
+    def record_interaction(
+        db: Session,
+        user_id: str,
+        session_id: str,
+        persona_id: str,
+        interaction_type: str,
+        rating: Optional[int] = None,
+        helpful: Optional[bool] = None,
+        duration_seconds: Optional[int] = None,
+        message_count: Optional[int] = None,
+        concerns: Optional[List[str]] = None,
+        user_age_range: Optional[str] = None,
+        completed: bool = True
+    ) -> UserInteractionHistory:
+        """
+        사용자 상호작용 기록
+
+        Args:
+            db: 데이터베이스 세션
+            user_id: 사용자 ID
+            session_id: 세션 ID
+            persona_id: 페르소나 ID
+            interaction_type: 상호작용 유형 (chat, feedback, recommendation)
+            rating: 평점 (1-5, optional)
+            helpful: 도움이 되었는가 (optional)
+            duration_seconds: 세션 길이 (초)
+            message_count: 메시지 수
+            concerns: 고민 리스트
+            user_age_range: 사용자 나이대
+            completed: 완료 여부
+
+        Returns:
+            UserInteractionHistory 객체
+        """
+        user = UserManager.get_user(db, user_id)
+        if not user:
+            user = UserManager.create_user(db, user_id)
+
+        # 상호작용 기록
+        interaction = UserInteractionHistory(
+            user_id=user.id,
+            session_id=session_id,
+            persona_id=persona_id,
+            interaction_type=interaction_type,
+            rating=rating,
+            helpful=helpful,
+            duration_seconds=duration_seconds,
+            message_count=message_count,
+            concerns=concerns,
+            user_age_range=user_age_range,
+            completed=completed,
+            created_at=datetime.utcnow()
+        )
+
+        db.add(interaction)
+        db.commit()
+        db.refresh(interaction)
+
+        # 선호도 업데이트 (평점이 있는 경우)
+        if rating is not None:
+            UserPersonalizationManager._update_user_preference(
+                db, user.id, persona_id, rating, helpful
+            )
+
+        return interaction
+
+    @staticmethod
+    def _update_user_preference(
+        db: Session,
+        user_internal_id: int,
+        persona_id: str,
+        rating: int,
+        helpful: Optional[bool]
+    ):
+        """
+        사용자 선호도 업데이트
+
+        Args:
+            db: 데이터베이스 세션
+            user_internal_id: 내부 사용자 ID
+            persona_id: 페르소나 ID
+            rating: 평점
+            helpful: 도움이 되었는가
+        """
+        # 기존 선호도 레코드 조회 또는 생성
+        preference = db.query(UserPersonaPreference).filter(
+            UserPersonaPreference.user_id == user_internal_id,
+            UserPersonaPreference.persona_id == persona_id
+        ).first()
+
+        if not preference:
+            preference = UserPersonaPreference(
+                user_id=user_internal_id,
+                persona_id=persona_id,
+                total_sessions=0,
+                total_feedback_count=0,
+                average_rating=0.0,
+                preference_score=0.0,
+                successful_sessions=0,
+                success_rate=0.0,
+                personal_weight_adjustment=0.0,
+                confidence=0.0,
+                first_interaction=datetime.utcnow()
+            )
+            db.add(preference)
+
+        # 통계 업데이트
+        preference.total_feedback_count += 1
+        old_average = preference.average_rating
+        preference.average_rating = (
+            (old_average * (preference.total_feedback_count - 1) + rating)
+            / preference.total_feedback_count
+        )
+
+        # 성공 세션 카운트 (rating >= 4)
+        if rating >= 4:
+            preference.successful_sessions += 1
+
+        preference.success_rate = (
+            preference.successful_sessions / preference.total_feedback_count
+            if preference.total_feedback_count > 0 else 0.0
+        )
+
+        # 선호도 점수 계산 (-1 to +1)
+        # 평균 평점 4를 기준으로 정규화
+        normalized_rating = (preference.average_rating - 3.0) / 2.0  # -1 to +1
+        preference.preference_score = max(-1.0, min(1.0, normalized_rating))
+
+        # 신뢰도 계산 (최소 5개 피드백 필요)
+        preference.confidence = min(1.0, preference.total_feedback_count / 10.0)
+
+        # 개인 가중치 조정 계산
+        # 선호도 점수와 신뢰도에 기반
+        preference.personal_weight_adjustment = (
+            preference.preference_score * 2.0 * preference.confidence
+        )
+
+        preference.last_interaction = datetime.utcnow()
+
+        db.commit()
+
+    @staticmethod
+    def get_user_preferences(
+        db: Session,
+        user_id: str,
+        min_confidence: float = 0.0
+    ) -> List[Dict[str, Any]]:
+        """
+        사용자 선호도 조회
+
+        Args:
+            db: 데이터베이스 세션
+            user_id: 사용자 ID
+            min_confidence: 최소 신뢰도 필터
+
+        Returns:
+            선호도 리스트
+        """
+        user = UserManager.get_user(db, user_id)
+        if not user:
+            return []
+
+        preferences = db.query(UserPersonaPreference).filter(
+            UserPersonaPreference.user_id == user.id,
+            UserPersonaPreference.confidence >= min_confidence
+        ).order_by(UserPersonaPreference.preference_score.desc()).all()
+
+        return [
+            {
+                "persona_id": pref.persona_id,
+                "preference_score": round(pref.preference_score, 2),
+                "average_rating": round(pref.average_rating, 2),
+                "total_feedback_count": pref.total_feedback_count,
+                "success_rate": round(pref.success_rate, 2),
+                "personal_weight_adjustment": round(pref.personal_weight_adjustment, 2),
+                "confidence": round(pref.confidence, 2),
+                "first_interaction": pref.first_interaction.isoformat(),
+                "last_interaction": pref.last_interaction.isoformat()
+            }
+            for pref in preferences
+        ]
+
+    @staticmethod
+    def get_user_persona_weight(
+        db: Session,
+        user_id: str,
+        persona_id: str
+    ) -> float:
+        """
+        사용자별 페르소나 가중치 조회
+
+        Args:
+            db: 데이터베이스 세션
+            user_id: 사용자 ID
+            persona_id: 페르소나 ID
+
+        Returns:
+            개인 가중치 조정값 (0.0 if not found)
+        """
+        user = UserManager.get_user(db, user_id)
+        if not user:
+            return 0.0
+
+        preference = db.query(UserPersonaPreference).filter(
+            UserPersonaPreference.user_id == user.id,
+            UserPersonaPreference.persona_id == persona_id
+        ).first()
+
+        if not preference:
+            return 0.0
+
+        return preference.personal_weight_adjustment
+
+    @staticmethod
+    def get_user_interaction_history(
+        db: Session,
+        user_id: str,
+        persona_id: Optional[str] = None,
+        limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """
+        사용자 상호작용 이력 조회
+
+        Args:
+            db: 데이터베이스 세션
+            user_id: 사용자 ID
+            persona_id: 페르소나 ID 필터 (optional)
+            limit: 최대 개수
+
+        Returns:
+            상호작용 이력 리스트
+        """
+        user = UserManager.get_user(db, user_id)
+        if not user:
+            return []
+
+        query = db.query(UserInteractionHistory).filter(
+            UserInteractionHistory.user_id == user.id
+        )
+
+        if persona_id:
+            query = query.filter(UserInteractionHistory.persona_id == persona_id)
+
+        interactions = query.order_by(
+            UserInteractionHistory.created_at.desc()
+        ).limit(limit).all()
+
+        return [
+            {
+                "session_id": inter.session_id,
+                "persona_id": inter.persona_id,
+                "interaction_type": inter.interaction_type,
+                "rating": inter.rating,
+                "helpful": inter.helpful,
+                "duration_seconds": inter.duration_seconds,
+                "message_count": inter.message_count,
+                "concerns": inter.concerns,
+                "completed": inter.completed,
+                "created_at": inter.created_at.isoformat()
+            }
+            for inter in interactions
+        ]
+
+    @staticmethod
+    def get_user_stats(db: Session, user_id: str) -> Dict[str, Any]:
+        """
+        사용자 개인화 통계
+
+        Args:
+            db: 데이터베이스 세션
+            user_id: 사용자 ID
+
+        Returns:
+            통계 딕셔너리
+        """
+        user = UserManager.get_user(db, user_id)
+        if not user:
+            return {}
+
+        # 선호도 통계
+        preferences = db.query(UserPersonaPreference).filter(
+            UserPersonaPreference.user_id == user.id
+        ).all()
+
+        total_feedback = sum(p.total_feedback_count for p in preferences)
+        avg_rating = (
+            sum(p.average_rating * p.total_feedback_count for p in preferences) / total_feedback
+            if total_feedback > 0 else 0.0
+        )
+
+        # 상호작용 통계
+        interactions = db.query(UserInteractionHistory).filter(
+            UserInteractionHistory.user_id == user.id
+        ).all()
+
+        total_interactions = len(interactions)
+        completed_count = sum(1 for i in interactions if i.completed)
+
+        # 가장 선호하는 페르소나
+        favorite_persona = None
+        if preferences:
+            top_pref = max(preferences, key=lambda p: p.preference_score)
+            favorite_persona = {
+                "persona_id": top_pref.persona_id,
+                "preference_score": round(top_pref.preference_score, 2),
+                "interaction_count": top_pref.total_feedback_count
+            }
+
+        return {
+            "user_id": user.user_id,
+            "total_personas_tried": len(preferences),
+            "total_feedback_count": total_feedback,
+            "overall_average_rating": round(avg_rating, 2),
+            "total_interactions": total_interactions,
+            "completed_interactions": completed_count,
+            "completion_rate": round(completed_count / total_interactions, 2) if total_interactions > 0 else 0.0,
+            "favorite_persona": favorite_persona,
+            "personalization_active": len(preferences) >= 3  # 최소 3개 페르소나 경험 필요
+        }
 
 
 # ============================================================================

@@ -202,6 +202,7 @@ class PersonaRecommendRequest(BaseModel):
     age_range: Optional[str] = Field(None, description="User age range (e.g., '20대')")
     concerns: Optional[List[str]] = Field(None, description="List of concerns (e.g., ['우울', '불안'])")
     top_k: int = Field(default=3, ge=1, le=10, description="Number of recommendations")
+    user_id: Optional[str] = Field(None, description="User ID for personalized recommendations (optional)")
 
 
 class PersonaResponse(BaseModel):
@@ -1327,15 +1328,17 @@ async def recommend_personas(
     authenticated: bool = Depends(verify_api_key)
 ):
     """
-    Get persona recommendations based on user profile
+    Get persona recommendations based on user profile with personalization
 
-    Uses machine learning from user feedback to improve recommendations over time.
+    Uses machine learning from user feedback AND user-specific preferences
+    to deliver highly personalized recommendations.
 
     - **age_range**: User age range (e.g., '20대', '30대')
     - **concerns**: List of concerns (e.g., ['우울', '불안', '직장'])
     - **top_k**: Number of recommendations (default: 3)
+    - **user_id**: User ID for personalized recommendations (optional but recommended)
 
-    Returns recommended personas ranked by suitability (learned weights applied automatically)
+    Returns recommended personas ranked by suitability with personalization markers (⭐)
     """
     if not persona_manager:
         raise HTTPException(
@@ -1344,19 +1347,21 @@ async def recommend_personas(
         )
 
     try:
-        # Use learned weights from feedback
+        # Use learned weights + personalization
         recommendations = persona_manager.recommend_personas(
             age_range=recommend_request.age_range,
             concerns=recommend_request.concerns,
             top_k=recommend_request.top_k,
             db_session=db,
-            use_learned_weights=True
+            use_learned_weights=True,
+            user_id=recommend_request.user_id,
+            use_personalization=True
         )
 
-        # Add note about learning
-        learning_note = ""
-        if recommend_request.age_range and recommend_request.concerns:
-            learning_note = " (AI-enhanced with user feedback learning)"
+        # Add note about learning and personalization
+        learning_note = " (AI-enhanced)"
+        if recommend_request.user_id:
+            learning_note += " + Personalized for you"
 
         return PersonaRecommendationResponse(
             recommendations=recommendations,

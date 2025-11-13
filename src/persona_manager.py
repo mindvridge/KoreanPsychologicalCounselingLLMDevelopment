@@ -175,10 +175,12 @@ class PersonaManager:
         concerns: Optional[List[str]] = None,
         top_k: int = 3,
         db_session: Optional[Session] = None,
-        use_learned_weights: bool = True
+        use_learned_weights: bool = True,
+        user_id: Optional[str] = None,
+        use_personalization: bool = True
     ) -> List[Dict[str, Any]]:
         """
-        Recommend personas based on user profile
+        Recommend personas based on user profile with personalization
 
         Args:
             age_range: User age range (e.g., "20대")
@@ -186,13 +188,15 @@ class PersonaManager:
             top_k: Number of recommendations
             db_session: Database session for learned weights (optional)
             use_learned_weights: Whether to use learned weights from feedback
+            user_id: User ID for personalization (optional)
+            use_personalization: Whether to apply user-specific personalization
 
         Returns:
             List of recommended personas with scores
         """
         persona_scores: Dict[str, float] = {pid: 0.0 for pid in self.personas.keys()}
 
-        # Load learned weight adjustments if available
+        # Load learned weight adjustments if available (global learning)
         learned_weights = {}
         if use_learned_weights and db_session is not None and concerns and age_range:
             try:
@@ -211,6 +215,25 @@ class PersonaManager:
                     logger.info(f"Loaded {len(learned_weights)} learned weight adjustments")
             except Exception as e:
                 logger.warning(f"Failed to load learned weights: {e}, using rule-based only")
+
+        # Load user-specific preferences if available (personalization)
+        user_weights = {}
+        if use_personalization and user_id and db_session is not None:
+            try:
+                from src.database import UserPersonalizationManager
+                for pid in self.personas.keys():
+                    personal_weight = UserPersonalizationManager.get_user_persona_weight(
+                        db_session,
+                        user_id=user_id,
+                        persona_id=pid
+                    )
+                    if personal_weight != 0.0:
+                        user_weights[pid] = personal_weight
+
+                if user_weights:
+                    logger.info(f"Loaded {len(user_weights)} user-specific weight adjustments")
+            except Exception as e:
+                logger.warning(f"Failed to load user preferences: {e}, skipping personalization")
 
         # Age-based recommendation
         if age_range:
@@ -239,6 +262,13 @@ class PersonaManager:
 
                         persona_scores[pid] += weight
 
+        # Apply user-specific personalization weights
+        if user_weights:
+            for pid, user_weight in user_weights.items():
+                if pid in persona_scores:
+                    persona_scores[pid] += user_weight
+                    logger.debug(f"Applied user weight {user_weight:+.2f} for {pid}")
+
         # Sort by score
         sorted_personas = sorted(
             persona_scores.items(),
@@ -250,6 +280,10 @@ class PersonaManager:
         recommendations = []
         for persona_id, score in sorted_personas[:top_k]:
             persona = self.personas[persona_id]
+
+            # Determine if this persona was boosted by personalization
+            personalized = persona_id in user_weights
+
             recommendations.append({
                 "id": persona.id,
                 "name": persona.name,
@@ -259,8 +293,9 @@ class PersonaManager:
                 "specialties": persona.specialties,
                 "intro": persona.get_brief_intro(),
                 "reason": self._generate_recommendation_reason(
-                    persona, age_range, concerns
-                )
+                    persona, age_range, concerns, personalized
+                ),
+                "personalized": personalized
             })
 
         return recommendations
@@ -269,10 +304,15 @@ class PersonaManager:
         self,
         persona: PersonaProfile,
         age_range: Optional[str],
-        concerns: Optional[List[str]]
+        concerns: Optional[List[str]],
+        personalized: bool = False
     ) -> str:
         """추천 이유 생성"""
         reasons = []
+
+        # 개인화 표시
+        if personalized:
+            reasons.append("⭐ 회원님 선호")
 
         # 나이대 매칭
         if age_range:
