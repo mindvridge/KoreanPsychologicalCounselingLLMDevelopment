@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from main_integrated import IntegratedMentalHealthSystem
 from src.safety_system_v2 import RiskLevel
+from src.personalization import PersonalizationManager
 
 # ============================================================================
 # Configuration and Setup
@@ -76,11 +77,13 @@ crisis_detections = Counter('crisis_detections_total', 'Total crisis detections'
 class ChatRequest(BaseModel):
     """Chat message request"""
     session_id: Optional[str] = Field(None, description="Session ID (will be generated if not provided)")
+    user_id: Optional[str] = Field(None, description="User identifier for personalization (optional)")
     message: str = Field(..., min_length=1, max_length=2000, description="User message")
     conversation_history: Optional[List[Dict[str, str]]] = Field(
         None,
         description="Conversation history in format [{'role': 'user/assistant', 'content': '...'}]"
     )
+    consent: bool = Field(default=True, description="Data storage consent for personalization")
 
     @validator('message')
     def message_not_empty(cls, v):
@@ -113,6 +116,7 @@ class SessionResponse(BaseModel):
 class AssessmentRequest(BaseModel):
     """Psychological assessment request"""
     session_id: str = Field(..., description="Session ID")
+    user_id: Optional[str] = Field(None, description="User identifier for saving assessment history")
     assessment_type: str = Field(..., description="Assessment type: phq9, gad7, k10")
     responses: List[int] = Field(..., description="Assessment responses (0-3 or 0-4 depending on type)")
 
@@ -158,12 +162,48 @@ class ErrorResponse(BaseModel):
     timestamp: str
 
 
+class UserProfileResponse(BaseModel):
+    """User profile response (with personalization)"""
+    user_id: str = Field(..., description="Anonymous user ID")
+    preferred_name: Optional[str] = Field(None, description="Preferred name (e.g., '철수님')")
+    age_range: Optional[str] = Field(None, description="Age range (e.g., '20대')")
+    main_concerns: List[str] = Field(default_factory=list, description="Main concerns")
+    total_conversations: int = Field(..., description="Total conversation count")
+    total_messages: int = Field(..., description="Total message count")
+    crisis_count: int = Field(..., description="Number of crisis detections")
+    created_at: str = Field(..., description="Account creation timestamp")
+    last_active: str = Field(..., description="Last active timestamp")
+
+
+class UserHistoryResponse(BaseModel):
+    """User conversation history response"""
+    user_id: str
+    conversations: List[Dict[str, Any]] = Field(..., description="Conversation turns")
+    total_count: int = Field(..., description="Total conversation count")
+
+
+class UserAssessmentsResponse(BaseModel):
+    """User assessment history response"""
+    user_id: str
+    assessments: List[Dict[str, Any]] = Field(..., description="Assessment history")
+    trend: Optional[Dict[str, Any]] = Field(None, description="Trend analysis")
+
+
+class UserConsentRequest(BaseModel):
+    """User consent update request"""
+    consent_given: bool = Field(..., description="Data collection consent")
+    data_retention_days: Optional[int] = Field(None, description="Data retention period in days")
+
+
 # ============================================================================
 # Global State and Session Management
 # ============================================================================
 
 # Global system instance (singleton)
 mental_health_system: Optional[IntegratedMentalHealthSystem] = None
+
+# Global personalization manager (for long-term memory)
+personalization_manager: Optional[PersonalizationManager] = None
 
 # In-memory session storage (use Redis in production)
 sessions: Dict[str, Dict] = {}
@@ -241,7 +281,7 @@ def cleanup_old_sessions(max_age_hours: int = 24):
 @app.on_event("startup")
 async def startup_event():
     """Initialize system on startup"""
-    global mental_health_system
+    global mental_health_system, personalization_manager
 
     logger.info("="*70)
     logger.info("Starting Korean Mental Health Counseling API")
@@ -260,6 +300,17 @@ async def startup_event():
             logger.warning("API will run in degraded mode")
         else:
             logger.info("All components initialized successfully")
+
+        # Initialize personalization manager (long-term memory)
+        if os.getenv("ENABLE_LONG_TERM_MEMORY", "true").lower() == "true":
+            try:
+                personalization_manager = PersonalizationManager()
+                logger.info("✓ PersonalizationManager initialized (long-term memory enabled)")
+            except Exception as e:
+                logger.error(f"Failed to initialize PersonalizationManager: {e}")
+                logger.warning("Long-term memory features will be disabled")
+        else:
+            logger.info("Long-term memory disabled (ENABLE_LONG_TERM_MEMORY=false)")
 
         logger.info("API is ready to accept requests")
         logger.info("="*70)
@@ -341,11 +392,13 @@ async def chat(
     authenticated: bool = Depends(verify_api_key)
 ):
     """
-    Process a chat message
+    Process a chat message with personalization support
 
     - **session_id**: Optional session ID (will be generated if not provided)
+    - **user_id**: Optional user identifier for personalization and long-term memory
     - **message**: User message (required)
     - **conversation_history**: Optional conversation history
+    - **consent**: Data storage consent (default: true)
 
     Returns AI response with crisis detection and emotion analysis
     """
@@ -365,13 +418,44 @@ async def chat(
         # Get session data
         session_data = sessions[session_id]
 
+        # Personalization: Get or create user
+        pm_user_id = None
+        is_new_user = False
+        personalized_greeting = None
+        user_context = ""
+
+        if personalization_manager and chat_request.user_id:
+            try:
+                pm_user_id, is_new_user = personalization_manager.get_or_create_user(
+                    user_identifier=chat_request.user_id,
+                    consent=chat_request.consent
+                )
+
+                # Generate personalized greeting for first message in session
+                if len(session_data["conversation_history"]) == 0:
+                    personalized_greeting = personalization_manager.get_personalized_greeting(
+                        pm_user_id, is_new_user
+                    )
+
+                # Get user context for LLM
+                user_context = personalization_manager.generate_personalized_context(pm_user_id)
+
+            except Exception as e:
+                logger.warning(f"Personalization error: {e}. Continuing without personalization.")
+
         # Use session history if not provided
         history = chat_request.conversation_history or session_data["conversation_history"]
+
+        # Add user context to message for personalized responses
+        enhanced_message = chat_request.message
+        if user_context:
+            # Prepend context for LLM (will be processed but not shown to user)
+            enhanced_message = f"{user_context}\n\n[사용자 메시지]\n{chat_request.message}"
 
         # Process message through integrated system
         result = mental_health_system.process_message(
             session_id=session_id,
-            user_message=chat_request.message,
+            user_message=enhanced_message,
             conversation_history=history
         )
 
@@ -383,6 +467,11 @@ async def chat(
                 detail=result["error"]
             )
 
+        # Prepend personalized greeting if applicable
+        response_text = result["response"]
+        if personalized_greeting:
+            response_text = f"{personalized_greeting}\n\n{response_text}"
+
         # Update session history
         session_data["conversation_history"].append({
             "role": "user",
@@ -390,12 +479,40 @@ async def chat(
         })
         session_data["conversation_history"].append({
             "role": "assistant",
-            "content": result["response"]
+            "content": response_text
         })
 
         # Limit history length (keep last 20 messages)
         if len(session_data["conversation_history"]) > 40:  # 20 pairs
             session_data["conversation_history"] = session_data["conversation_history"][-40:]
+
+        # Save to database (long-term memory)
+        if personalization_manager and pm_user_id:
+            try:
+                # Save user message
+                personalization_manager.save_conversation_turn(
+                    user_id=pm_user_id,
+                    session_id=session_id,
+                    role="user",
+                    content=chat_request.message,
+                    detected_emotion=None,
+                    crisis_detected=False,
+                    crisis_level=0
+                )
+
+                # Save assistant response
+                personalization_manager.save_conversation_turn(
+                    user_id=pm_user_id,
+                    session_id=session_id,
+                    role="assistant",
+                    content=response_text,
+                    detected_emotion=result.get("emotions", {}).get("primary_emotion"),
+                    crisis_detected=result.get("crisis_detected", False),
+                    crisis_level=result.get("crisis_level", 0),
+                    response_time=(datetime.now() - start_time).total_seconds()
+                )
+            except Exception as e:
+                logger.error(f"Failed to save conversation to database: {e}")
 
         # Update crisis count
         if result.get("crisis_detected", False):
@@ -410,7 +527,7 @@ async def chat(
         # Build response
         return ChatResponse(
             session_id=session_id,
-            response=result["response"],
+            response=response_text,  # Use modified response with personalized greeting
             crisis_detected=result.get("crisis_detected", False),
             crisis_level=result.get("crisis_level", 0),
             emotions=result.get("emotions"),
@@ -547,6 +664,30 @@ async def conduct_assessment(
 
             # Update system stats
             mental_health_system.stats["assessments_conducted"] += 1
+
+        # Save to database (long-term memory) if user_id provided
+        if personalization_manager and assessment_request.user_id:
+            try:
+                # Get or create user
+                pm_user_id, _ = personalization_manager.get_or_create_user(
+                    user_identifier=assessment_request.user_id,
+                    consent=True
+                )
+
+                # Save assessment result
+                personalization_manager.save_assessment(
+                    user_id=pm_user_id,
+                    session_id=assessment_request.session_id,
+                    assessment_type=assessment_type,
+                    responses=assessment_request.responses,
+                    score=result["score"],
+                    severity=result["severity"],
+                    interpretation=result["interpretation"],
+                    recommendations=result.get("recommendations", [])
+                )
+                logger.info(f"Saved assessment to database for user {pm_user_id}")
+            except Exception as e:
+                logger.error(f"Failed to save assessment to database: {e}")
 
         return AssessmentResponse(
             session_id=assessment_request.session_id,
@@ -692,9 +833,321 @@ async def system_info():
             "Psychological assessments (PHQ-9, GAD-7, K-10)",
             "RAG-based knowledge retrieval",
             "Real-time monitoring",
-            "PIPA-compliant logging"
+            "PIPA-compliant logging",
+            "Long-term memory & personalization" if personalization_manager else None
         ]
     }
+
+
+# ============================================================================
+# User Profile Endpoints (Personalization & Long-term Memory)
+# ============================================================================
+
+@app.get("/api/v1/user/{user_id}/profile", response_model=UserProfileResponse, tags=["User Profile"])
+async def get_user_profile(
+    user_id: str,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Get user profile with personalization data
+
+    Returns user profile including preferred name, age range, concerns, and statistics
+    """
+    if not personalization_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Personalization system not available (ENABLE_LONG_TERM_MEMORY=false)"
+        )
+
+    try:
+        # Get user context
+        context = personalization_manager.get_user_context(user_id)
+
+        if not context:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User not found: {user_id}"
+            )
+
+        # Get user from database for timestamps
+        from src.database import get_db, UserManager
+        db = next(get_db())
+        try:
+            user = UserManager.get_user(db, user_id)
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"User not found: {user_id}"
+                )
+
+            return UserProfileResponse(
+                user_id=user_id,
+                preferred_name=context.get("preferred_name"),
+                age_range=context.get("age_range"),
+                main_concerns=context.get("main_concerns", []),
+                total_conversations=context.get("total_conversations", 0),
+                total_messages=context.get("total_messages", 0),
+                crisis_count=context.get("crisis_count", 0),
+                created_at=user.created_at.isoformat(),
+                last_active=user.last_active.isoformat()
+            )
+        finally:
+            db.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving user profile: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving user profile: {str(e)}"
+        )
+
+
+@app.get("/api/v1/user/{user_id}/history", response_model=UserHistoryResponse, tags=["User Profile"])
+async def get_user_history(
+    user_id: str,
+    session_id: Optional[str] = None,
+    limit: int = 20,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Get user conversation history
+
+    - **user_id**: User identifier
+    - **session_id**: Optional session filter
+    - **limit**: Maximum number of conversation turns (default: 20)
+
+    Returns conversation history
+    """
+    if not personalization_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Personalization system not available"
+        )
+
+    try:
+        conversations = personalization_manager.get_conversation_history(
+            user_id=user_id,
+            session_id=session_id,
+            limit=limit
+        )
+
+        return UserHistoryResponse(
+            user_id=user_id,
+            conversations=conversations,
+            total_count=len(conversations)
+        )
+
+    except Exception as e:
+        logger.error(f"Error retrieving conversation history: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving conversation history: {str(e)}"
+        )
+
+
+@app.get("/api/v1/user/{user_id}/assessments", response_model=UserAssessmentsResponse, tags=["User Profile"])
+async def get_user_assessments(
+    user_id: str,
+    assessment_type: Optional[str] = None,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Get user assessment history and trends
+
+    - **user_id**: User identifier
+    - **assessment_type**: Optional filter by type (phq9, gad7, k10)
+
+    Returns assessment history with trend analysis
+    """
+    if not personalization_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Personalization system not available"
+        )
+
+    try:
+        from src.database import get_db, AssessmentManager
+        db = next(get_db())
+        try:
+            # Get assessment history
+            assessments = AssessmentManager.get_assessment_history(
+                db, user_id, assessment_type, limit=10
+            )
+
+            # Get trend data if assessment_type specified
+            trend = None
+            if assessment_type:
+                trend = AssessmentManager.get_trend_data(db, user_id, assessment_type)
+
+            return UserAssessmentsResponse(
+                user_id=user_id,
+                assessments=assessments,
+                trend=trend
+            )
+        finally:
+            db.close()
+
+    except Exception as e:
+        logger.error(f"Error retrieving assessments: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving assessments: {str(e)}"
+        )
+
+
+@app.get("/api/v1/user/{user_id}/stats", tags=["User Profile"])
+async def get_user_stats(
+    user_id: str,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Get user statistics
+
+    Returns detailed statistics about user activity
+    """
+    if not personalization_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Personalization system not available"
+        )
+
+    try:
+        stats = personalization_manager.get_user_stats(user_id)
+
+        if not stats:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User not found: {user_id}"
+            )
+
+        return stats
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving user stats: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving user stats: {str(e)}"
+        )
+
+
+@app.put("/api/v1/user/{user_id}/consent", tags=["User Profile"])
+async def update_user_consent(
+    user_id: str,
+    consent_request: UserConsentRequest,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Update user data consent settings
+
+    - **consent_given**: Whether user consents to data storage
+    - **data_retention_days**: Optional custom retention period
+
+    Updates user consent preferences (PIPA compliance)
+    """
+    if not personalization_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Personalization system not available"
+        )
+
+    try:
+        from src.database import get_db, UserManager
+        db = next(get_db())
+        try:
+            user = UserManager.get_user(db, user_id)
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"User not found: {user_id}"
+                )
+
+            # Update consent
+            user.consent_given = consent_request.consent_given
+
+            if consent_request.data_retention_days is not None:
+                user.data_retention_days = consent_request.data_retention_days
+
+            db.commit()
+
+            return {
+                "message": "Consent updated successfully",
+                "user_id": user_id,
+                "consent_given": user.consent_given,
+                "data_retention_days": user.data_retention_days
+            }
+
+        finally:
+            db.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating consent: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating consent: {str(e)}"
+        )
+
+
+@app.delete("/api/v1/user/{user_id}", tags=["User Profile"])
+async def delete_user(
+    user_id: str,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Delete user data (Right to be Forgotten - PIPA compliance)
+
+    Permanently deletes all user data including:
+    - User profile
+    - Conversation history
+    - Assessment results
+    - Metadata
+
+    WARNING: This action is irreversible!
+    """
+    if not personalization_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Personalization system not available"
+        )
+
+    try:
+        from src.database import get_db, UserManager
+        db = next(get_db())
+        try:
+            user = UserManager.get_user(db, user_id)
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"User not found: {user_id}"
+                )
+
+            # Delete all user data
+            UserManager.delete_user(db, user_id)
+
+            logger.info(f"User deleted (Right to be Forgotten): {user_id}")
+
+            return {
+                "message": "User data deleted successfully",
+                "user_id": user_id,
+                "timestamp": datetime.now().isoformat()
+            }
+
+        finally:
+            db.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting user: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting user: {str(e)}"
+        )
 
 
 # ============================================================================
