@@ -229,6 +229,44 @@ class PersonaRecommendationResponse(BaseModel):
     reason: Optional[str] = None
 
 
+class PersonaFeedbackRequest(BaseModel):
+    """Persona feedback submission request"""
+    session_id: str = Field(..., description="Session ID")
+    user_id: Optional[str] = Field(None, description="User ID (optional, anonymous allowed)")
+    rating: int = Field(..., ge=1, le=5, description="Rating (1-5)")
+    helpful: bool = Field(default=True, description="Was this persona helpful?")
+    appropriate: bool = Field(default=True, description="Was this persona appropriate?")
+    would_recommend_again: bool = Field(default=True, description="Would you use this persona again?")
+    concerns_addressed: Optional[List[str]] = Field(None, description="List of concerns addressed")
+    feedback_text: Optional[str] = Field(None, max_length=1000, description="Free-form feedback")
+    user_age_range: Optional[str] = Field(None, description="User age range (e.g., '20대')")
+
+
+class PersonaFeedbackResponse(BaseModel):
+    """Persona feedback response"""
+    success: bool
+    message: str
+    feedback_id: Optional[int] = None
+
+
+class PersonaPerformanceResponse(BaseModel):
+    """Persona performance statistics response"""
+    persona_id: str
+    total_feedback_count: int
+    average_rating: float
+    helpful_rate: float
+    appropriate_rate: float
+    recommendation_rate: float
+    last_updated: Optional[str] = None
+
+
+class PersonaAnalyticsResponse(BaseModel):
+    """Persona analytics response"""
+    personas: List[Dict[str, Any]]
+    total_feedback_count: int
+    overall_average_rating: float
+
+
 # ============================================================================
 # Global State and Session Management
 # ============================================================================
@@ -1285,16 +1323,19 @@ async def get_persona(
 @app.post("/api/v1/personas/recommend", response_model=PersonaRecommendationResponse, tags=["Personas"])
 async def recommend_personas(
     recommend_request: PersonaRecommendRequest,
+    db: Session = Depends(get_db),
     authenticated: bool = Depends(verify_api_key)
 ):
     """
     Get persona recommendations based on user profile
 
+    Uses machine learning from user feedback to improve recommendations over time.
+
     - **age_range**: User age range (e.g., '20대', '30대')
     - **concerns**: List of concerns (e.g., ['우울', '불안', '직장'])
     - **top_k**: Number of recommendations (default: 3)
 
-    Returns recommended personas ranked by suitability
+    Returns recommended personas ranked by suitability (learned weights applied automatically)
     """
     if not persona_manager:
         raise HTTPException(
@@ -1303,15 +1344,23 @@ async def recommend_personas(
         )
 
     try:
+        # Use learned weights from feedback
         recommendations = persona_manager.recommend_personas(
             age_range=recommend_request.age_range,
             concerns=recommend_request.concerns,
-            top_k=recommend_request.top_k
+            top_k=recommend_request.top_k,
+            db_session=db,
+            use_learned_weights=True
         )
+
+        # Add note about learning
+        learning_note = ""
+        if recommend_request.age_range and recommend_request.concerns:
+            learning_note = " (AI-enhanced with user feedback learning)"
 
         return PersonaRecommendationResponse(
             recommendations=recommendations,
-            reason=f"Based on age: {recommend_request.age_range}, concerns: {recommend_request.concerns}"
+            reason=f"Based on age: {recommend_request.age_range}, concerns: {recommend_request.concerns}{learning_note}"
         )
 
     except Exception as e:
@@ -1401,6 +1450,234 @@ async def get_persona_statistics(authenticated: bool = Depends(verify_api_key)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting persona statistics: {str(e)}"
+        )
+
+
+@app.post("/api/v1/personas/{persona_id}/feedback", response_model=PersonaFeedbackResponse, tags=["Persona Feedback"])
+async def submit_persona_feedback(
+    persona_id: str,
+    feedback: PersonaFeedbackRequest,
+    db: Session = Depends(get_db),
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Submit feedback for a persona
+
+    Collects user feedback to improve persona recommendations through machine learning.
+
+    - **persona_id**: ID of the persona being rated
+    - **rating**: 1-5 star rating
+    - **helpful**: Whether the persona was helpful
+    - **appropriate**: Whether the persona was appropriate for the user's needs
+    - **would_recommend_again**: Whether user would use this persona again
+    - **concerns_addressed**: List of concerns that were addressed
+    - **feedback_text**: Optional free-form feedback
+    - **user_age_range**: User's age range for better learning
+    """
+    if not persona_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persona system not available"
+        )
+
+    # Verify persona exists
+    persona = persona_manager.get_persona(persona_id)
+    if not persona:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Persona '{persona_id}' not found"
+        )
+
+    try:
+        from src.database import PersonaFeedbackManager, UserManager
+
+        # Generate anonymous user ID if not provided
+        user_id = feedback.user_id
+        if not user_id:
+            user_id = UserManager.generate_user_id()
+
+        # Submit feedback
+        feedback_record = PersonaFeedbackManager.submit_feedback(
+            db=db,
+            user_id=user_id,
+            session_id=feedback.session_id,
+            persona_id=persona_id,
+            rating=feedback.rating,
+            helpful=feedback.helpful,
+            appropriate=feedback.appropriate,
+            would_recommend_again=feedback.would_recommend_again,
+            concerns_addressed=feedback.concerns_addressed,
+            feedback_text=feedback.feedback_text,
+            user_age_range=feedback.user_age_range
+        )
+
+        logger.info(f"Feedback submitted for persona {persona_id}: rating={feedback.rating}")
+
+        return PersonaFeedbackResponse(
+            success=True,
+            message="Feedback submitted successfully. Thank you for helping us improve!",
+            feedback_id=feedback_record.id
+        )
+
+    except Exception as e:
+        logger.error(f"Error submitting feedback: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error submitting feedback: {str(e)}"
+        )
+
+
+@app.get("/api/v1/personas/{persona_id}/performance", response_model=PersonaPerformanceResponse, tags=["Persona Feedback"])
+async def get_persona_performance(
+    persona_id: str,
+    db: Session = Depends(get_db),
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Get performance statistics for a specific persona
+
+    Returns aggregated performance metrics based on user feedback.
+    """
+    if not persona_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persona system not available"
+        )
+
+    # Verify persona exists
+    persona = persona_manager.get_persona(persona_id)
+    if not persona:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Persona '{persona_id}' not found"
+        )
+
+    try:
+        from src.database import PersonaFeedbackManager
+
+        stats = PersonaFeedbackManager.get_performance_stats(db, persona_id)
+
+        if not stats:
+            # Return default stats if no feedback yet
+            return PersonaPerformanceResponse(
+                persona_id=persona_id,
+                total_feedback_count=0,
+                average_rating=0.0,
+                helpful_rate=0.0,
+                appropriate_rate=0.0,
+                recommendation_rate=0.0,
+                last_updated=None
+            )
+
+        return PersonaPerformanceResponse(**stats)
+
+    except Exception as e:
+        logger.error(f"Error getting persona performance: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting persona performance: {str(e)}"
+        )
+
+
+@app.get("/api/v1/personas/analytics/all", response_model=PersonaAnalyticsResponse, tags=["Persona Feedback"])
+async def get_all_personas_analytics(
+    db: Session = Depends(get_db),
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Get analytics for all personas
+
+    Returns performance metrics for all personas, sorted by rating.
+    Useful for understanding which personas perform best overall.
+    """
+    if not persona_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persona system not available"
+        )
+
+    try:
+        from src.database import PersonaFeedbackManager
+
+        all_stats = PersonaFeedbackManager.get_all_performance_stats(db)
+
+        # Calculate overall metrics
+        total_feedback = sum(s['total_feedback_count'] for s in all_stats)
+
+        if total_feedback > 0:
+            # Weighted average rating
+            weighted_rating = sum(
+                s['average_rating'] * s['total_feedback_count']
+                for s in all_stats
+            ) / total_feedback
+        else:
+            weighted_rating = 0.0
+
+        # Enrich with persona display names
+        enriched_stats = []
+        for stat in all_stats:
+            persona = persona_manager.get_persona(stat['persona_id'])
+            if persona:
+                enriched_stat = {
+                    **stat,
+                    'display_name': persona.display_name,
+                    'personality_type': persona.personality['type']
+                }
+                enriched_stats.append(enriched_stat)
+
+        return PersonaAnalyticsResponse(
+            personas=enriched_stats,
+            total_feedback_count=total_feedback,
+            overall_average_rating=round(weighted_rating, 2)
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting persona analytics: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting persona analytics: {str(e)}"
+        )
+
+
+@app.get("/api/v1/personas/learning/weights", tags=["Persona Feedback"])
+async def get_learned_weights(
+    persona_id: Optional[str] = None,
+    concern: Optional[str] = None,
+    age_range: Optional[str] = None,
+    db: Session = Depends(get_db),
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Get learned weight adjustments
+
+    Returns the weight adjustments learned from user feedback.
+    These weights are used to improve persona recommendations over time.
+
+    - **persona_id**: Filter by persona (optional)
+    - **concern**: Filter by concern type (optional)
+    - **age_range**: Filter by age range (optional)
+    """
+    try:
+        from src.database import PersonaFeedbackManager
+
+        adjustments = PersonaFeedbackManager.get_weight_adjustments(
+            db,
+            persona_id=persona_id,
+            concern=concern,
+            age_range=age_range
+        )
+
+        return {
+            "adjustments": adjustments,
+            "total": len(adjustments),
+            "description": "Learned weight adjustments from user feedback"
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting learned weights: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting learned weights: {str(e)}"
         )
 
 

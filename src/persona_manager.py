@@ -13,6 +13,7 @@ import os
 import yaml
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
+from sqlalchemy.orm import Session
 import logging
 
 logger = logging.getLogger(__name__)
@@ -172,7 +173,9 @@ class PersonaManager:
         self,
         age_range: Optional[str] = None,
         concerns: Optional[List[str]] = None,
-        top_k: int = 3
+        top_k: int = 3,
+        db_session: Optional[Session] = None,
+        use_learned_weights: bool = True
     ) -> List[Dict[str, Any]]:
         """
         Recommend personas based on user profile
@@ -181,11 +184,33 @@ class PersonaManager:
             age_range: User age range (e.g., "20대")
             concerns: List of concerns (e.g., ["우울", "불안"])
             top_k: Number of recommendations
+            db_session: Database session for learned weights (optional)
+            use_learned_weights: Whether to use learned weights from feedback
 
         Returns:
             List of recommended personas with scores
         """
         persona_scores: Dict[str, float] = {pid: 0.0 for pid in self.personas.keys()}
+
+        # Load learned weight adjustments if available
+        learned_weights = {}
+        if use_learned_weights and db_session is not None and concerns and age_range:
+            try:
+                from src.database import PersonaFeedbackManager
+                for concern in concerns:
+                    adjustments = PersonaFeedbackManager.get_weight_adjustments(
+                        db_session,
+                        concern=concern,
+                        age_range=age_range
+                    )
+                    for adj in adjustments:
+                        key = (adj['persona_id'], concern, age_range)
+                        learned_weights[key] = adj['final_weight']
+
+                if learned_weights:
+                    logger.info(f"Loaded {len(learned_weights)} learned weight adjustments")
+            except Exception as e:
+                logger.warning(f"Failed to load learned weights: {e}, using rule-based only")
 
         # Age-based recommendation
         if age_range:
@@ -195,15 +220,24 @@ class PersonaManager:
                 if pid in persona_scores:
                     persona_scores[pid] += 2.0
 
-        # Concern-based recommendation
+        # Concern-based recommendation (with learned weights)
         if concerns:
             concern_rules = self.recommendation_rules.get('concern_based', {})
             for concern in concerns:
                 recommended_ids = concern_rules.get(concern, [])
                 for i, pid in enumerate(recommended_ids):
                     if pid in persona_scores:
-                        # First recommendation gets higher score
-                        persona_scores[pid] += (3.0 - i * 0.5)
+                        # Check for learned weight
+                        key = (pid, concern, age_range) if age_range else None
+                        if key and key in learned_weights:
+                            # Use learned weight from feedback
+                            weight = learned_weights[key]
+                            logger.debug(f"Using learned weight {weight:.2f} for {pid}/{concern}/{age_range}")
+                        else:
+                            # Use rule-based weight
+                            weight = 3.0 - i * 0.5
+
+                        persona_scores[pid] += weight
 
         # Sort by score
         sorted_personas = sorted(
