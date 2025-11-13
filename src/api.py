@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from main_integrated import IntegratedMentalHealthSystem
 from src.safety_system_v2 import RiskLevel
 from src.personalization import PersonalizationManager
+from src.persona_manager import PersonaManager, get_persona_manager
 
 # ============================================================================
 # Configuration and Setup
@@ -78,6 +79,7 @@ class ChatRequest(BaseModel):
     """Chat message request"""
     session_id: Optional[str] = Field(None, description="Session ID (will be generated if not provided)")
     user_id: Optional[str] = Field(None, description="User identifier for personalization (optional)")
+    persona_id: Optional[str] = Field(None, description="Counselor persona ID (e.g., 'warm_mother')")
     message: str = Field(..., min_length=1, max_length=2000, description="User message")
     conversation_history: Optional[List[Dict[str, str]]] = Field(
         None,
@@ -195,6 +197,38 @@ class UserConsentRequest(BaseModel):
     data_retention_days: Optional[int] = Field(None, description="Data retention period in days")
 
 
+class PersonaRecommendRequest(BaseModel):
+    """Persona recommendation request"""
+    age_range: Optional[str] = Field(None, description="User age range (e.g., '20대')")
+    concerns: Optional[List[str]] = Field(None, description="List of concerns (e.g., ['우울', '불안'])")
+    top_k: int = Field(default=3, ge=1, le=10, description="Number of recommendations")
+
+
+class PersonaResponse(BaseModel):
+    """Persona information response"""
+    id: str
+    name: str
+    display_name: str
+    age_range: str
+    gender: str
+    personality_type: str
+    specialties: List[str]
+    counseling_style: Dict[str, str]
+    intro: str
+
+
+class PersonaListResponse(BaseModel):
+    """Persona list response"""
+    personas: List[Dict[str, Any]]
+    total: int
+
+
+class PersonaRecommendationResponse(BaseModel):
+    """Persona recommendation response"""
+    recommendations: List[Dict[str, Any]]
+    reason: Optional[str] = None
+
+
 # ============================================================================
 # Global State and Session Management
 # ============================================================================
@@ -204,6 +238,9 @@ mental_health_system: Optional[IntegratedMentalHealthSystem] = None
 
 # Global personalization manager (for long-term memory)
 personalization_manager: Optional[PersonalizationManager] = None
+
+# Global persona manager (for counselor personas)
+persona_manager: Optional[PersonaManager] = None
 
 # In-memory session storage (use Redis in production)
 sessions: Dict[str, Dict] = {}
@@ -281,7 +318,7 @@ def cleanup_old_sessions(max_age_hours: int = 24):
 @app.on_event("startup")
 async def startup_event():
     """Initialize system on startup"""
-    global mental_health_system, personalization_manager
+    global mental_health_system, personalization_manager, persona_manager
 
     logger.info("="*70)
     logger.info("Starting Korean Mental Health Counseling API")
@@ -311,6 +348,14 @@ async def startup_event():
                 logger.warning("Long-term memory features will be disabled")
         else:
             logger.info("Long-term memory disabled (ENABLE_LONG_TERM_MEMORY=false)")
+
+        # Initialize persona manager (counselor personas)
+        try:
+            persona_manager = PersonaManager()
+            logger.info(f"✓ PersonaManager initialized ({len(persona_manager.personas)} personas loaded)")
+        except Exception as e:
+            logger.error(f"Failed to initialize PersonaManager: {e}")
+            logger.warning("Persona features will be disabled")
 
         logger.info("API is ready to accept requests")
         logger.info("="*70)
@@ -1147,6 +1192,215 @@ async def delete_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting user: {str(e)}"
+        )
+
+
+# ============================================================================
+# Persona Endpoints (Counselor Persona System)
+# ============================================================================
+
+@app.get("/api/v1/personas", response_model=PersonaListResponse, tags=["Personas"])
+async def list_personas(
+    include_details: bool = False,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Get list of available counselor personas
+
+    - **include_details**: Include full details (default: false)
+
+    Returns list of counselor personas with their characteristics
+    """
+    if not persona_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persona system not available"
+        )
+
+    try:
+        personas = persona_manager.list_personas(include_details=include_details)
+
+        return PersonaListResponse(
+            personas=personas,
+            total=len(personas)
+        )
+
+    except Exception as e:
+        logger.error(f"Error listing personas: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error listing personas: {str(e)}"
+        )
+
+
+@app.get("/api/v1/personas/{persona_id}", response_model=PersonaResponse, tags=["Personas"])
+async def get_persona(
+    persona_id: str,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Get detailed information about a specific persona
+
+    - **persona_id**: Persona identifier (e.g., 'warm_mother')
+
+    Returns full persona profile including personality, specialties, and counseling style
+    """
+    if not persona_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persona system not available"
+        )
+
+    try:
+        persona = persona_manager.get_persona(persona_id)
+
+        if not persona:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Persona not found: {persona_id}"
+            )
+
+        return PersonaResponse(
+            id=persona.id,
+            name=persona.name,
+            display_name=persona.display_name,
+            age_range=persona.age_range,
+            gender=persona.gender,
+            personality_type=persona.personality['type'],
+            specialties=persona.specialties,
+            counseling_style=persona.counseling_style,
+            intro=persona.get_brief_intro()
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting persona: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting persona: {str(e)}"
+        )
+
+
+@app.post("/api/v1/personas/recommend", response_model=PersonaRecommendationResponse, tags=["Personas"])
+async def recommend_personas(
+    recommend_request: PersonaRecommendRequest,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Get persona recommendations based on user profile
+
+    - **age_range**: User age range (e.g., '20대', '30대')
+    - **concerns**: List of concerns (e.g., ['우울', '불안', '직장'])
+    - **top_k**: Number of recommendations (default: 3)
+
+    Returns recommended personas ranked by suitability
+    """
+    if not persona_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persona system not available"
+        )
+
+    try:
+        recommendations = persona_manager.recommend_personas(
+            age_range=recommend_request.age_range,
+            concerns=recommend_request.concerns,
+            top_k=recommend_request.top_k
+        )
+
+        return PersonaRecommendationResponse(
+            recommendations=recommendations,
+            reason=f"Based on age: {recommend_request.age_range}, concerns: {recommend_request.concerns}"
+        )
+
+    except Exception as e:
+        logger.error(f"Error recommending personas: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error recommending personas: {str(e)}"
+        )
+
+
+@app.get("/api/v1/personas/search", tags=["Personas"])
+async def search_personas(
+    query: str = "",
+    specialty: Optional[str] = None,
+    gender: Optional[str] = None,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Search personas by various criteria
+
+    - **query**: Search query (name, specialty, personality)
+    - **specialty**: Filter by specialty
+    - **gender**: Filter by gender
+
+    Returns list of matching personas
+    """
+    if not persona_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persona system not available"
+        )
+
+    try:
+        results = persona_manager.search_personas(
+            query=query,
+            specialty=specialty,
+            gender=gender
+        )
+
+        personas_data = [
+            {
+                "id": p.id,
+                "name": p.name,
+                "display_name": p.display_name,
+                "age_range": p.age_range,
+                "gender": p.gender,
+                "personality_type": p.personality['type'],
+                "specialties": p.specialties,
+                "intro": p.get_brief_intro()
+            }
+            for p in results
+        ]
+
+        return {
+            "results": personas_data,
+            "total": len(personas_data),
+            "query": query
+        }
+
+    except Exception as e:
+        logger.error(f"Error searching personas: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error searching personas: {str(e)}"
+        )
+
+
+@app.get("/api/v1/personas/stats", tags=["Personas"])
+async def get_persona_statistics(authenticated: bool = Depends(verify_api_key)):
+    """
+    Get persona system statistics
+
+    Returns statistics about available personas
+    """
+    if not persona_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persona system not available"
+        )
+
+    try:
+        stats = persona_manager.get_statistics()
+        return stats
+
+    except Exception as e:
+        logger.error(f"Error getting persona statistics: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting persona statistics: {str(e)}"
         )
 
 
