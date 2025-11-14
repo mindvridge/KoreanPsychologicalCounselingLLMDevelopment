@@ -19,7 +19,8 @@ const CONFIG = {
         USER_ID: 'maum_user_id',
         CURRENT_SESSION: 'maum_current_session',
         SELECTED_COUNSELOR: 'maum_selected_counselor',
-        CHAT_HISTORY: 'maum_chat_history'
+        CHAT_HISTORY: 'maum_chat_history',
+        CONSENT_DATA: 'maum_consent_data'
     },
 
     // Avatar Mapping

@@ -243,8 +243,125 @@
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
+    <!-- Legal Consent Modal -->
+    <div id="consent-modal" class="consent-modal">
+        <div class="consent-modal-content">
+            <div class="consent-modal-header">
+                <h2>🧠 마음챗 서비스 이용 동의</h2>
+                <p class="consent-modal-subtitle">서비스 이용을 위해 다음 사항에 동의가 필요합니다</p>
+            </div>
+
+            <!-- Important Notice -->
+            <div class="consent-notice warning">
+                <h3>⚠️ 중요 고지사항</h3>
+                <div class="consent-notice-content">
+                    <p><strong>본 서비스는 의료행위가 아닙니다</strong></p>
+                    <ul>
+                        <li>의료법에 따른 의료행위가 아니며, 진단이나 치료를 목적으로 하지 않습니다</li>
+                        <li>의료기기가 아니며, 전문적인 심리상담이나 치료를 대체할 수 없습니다</li>
+                        <li>AI 상담사는 인간 전문가가 아니며, 판단의 오류가 있을 수 있습니다</li>
+                    </ul>
+                    <p class="consent-emergency"><strong>위기 상황 시 즉시 전문가의 도움을 받으세요</strong></p>
+                    <p>자살예방상담전화 ☎ 1393 | 정신건강위기상담 ☎ 1577-0199 | 응급 ☎ 119</p>
+                </div>
+            </div>
+
+            <!-- Consent Items -->
+            <div class="consent-items">
+                <!-- Required: Terms of Service -->
+                <div class="consent-item">
+                    <label class="consent-checkbox-label">
+                        <input type="checkbox" id="consent-terms" class="consent-checkbox" required />
+                        <span class="consent-required">[필수]</span>
+                        <span>서비스 이용약관 동의</span>
+                    </label>
+                    <button class="consent-view-btn" data-target="terms">전문 보기</button>
+                </div>
+
+                <!-- Required: Privacy Policy -->
+                <div class="consent-item">
+                    <label class="consent-checkbox-label">
+                        <input type="checkbox" id="consent-privacy" class="consent-checkbox" required />
+                        <span class="consent-required">[필수]</span>
+                        <span>개인정보처리방침 동의</span>
+                    </label>
+                    <button class="consent-view-btn" data-target="privacy">전문 보기</button>
+                </div>
+
+                <!-- Required: Sensitive Information -->
+                <div class="consent-item">
+                    <label class="consent-checkbox-label">
+                        <input type="checkbox" id="consent-sensitive" class="consent-checkbox" required />
+                        <span class="consent-required">[필수]</span>
+                        <span>민감정보(대화 내용) 수집·이용 동의</span>
+                    </label>
+                    <div class="consent-detail">
+                        <small>심리상담 대화 내용은 민감정보에 해당하며, 서비스 제공 및 AI 학습 목적으로 익명화하여 처리됩니다.</small>
+                    </div>
+                </div>
+
+                <!-- Optional: Service Improvement -->
+                <div class="consent-item">
+                    <label class="consent-checkbox-label">
+                        <input type="checkbox" id="consent-improvement" class="consent-checkbox" />
+                        <span class="consent-optional">[선택]</span>
+                        <span>서비스 개선을 위한 데이터 활용 동의</span>
+                    </label>
+                    <div class="consent-detail">
+                        <small>서비스 품질 향상 및 AI 모델 개선을 위한 통계 분석에 활용됩니다.</small>
+                    </div>
+                </div>
+
+                <!-- Age Confirmation -->
+                <div class="consent-item">
+                    <label class="consent-checkbox-label">
+                        <input type="checkbox" id="consent-age" class="consent-checkbox" required />
+                        <span class="consent-required">[필수]</span>
+                        <span>만 14세 이상입니다 (만 14세 미만은 법정대리인 동의 필요)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- All Agree -->
+            <div class="consent-all">
+                <label class="consent-checkbox-label consent-all-label">
+                    <input type="checkbox" id="consent-all" class="consent-checkbox" />
+                    <span><strong>전체 동의</strong> (선택 항목 포함)</span>
+                </label>
+            </div>
+
+            <!-- Actions -->
+            <div class="consent-actions">
+                <button id="consent-disagree-btn" class="btn-secondary">동의하지 않음</button>
+                <button id="consent-agree-btn" class="btn-primary" disabled>동의하고 시작하기</button>
+            </div>
+
+            <!-- Footer -->
+            <div class="consent-footer">
+                <small>동의하신 내용은 언제든지 철회할 수 있으며, 자세한 사항은 이용약관 및 개인정보처리방침을 참고해주세요.</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legal Document Viewer Modal -->
+    <div id="legal-viewer-modal" class="legal-viewer-modal">
+        <div class="legal-viewer-content">
+            <div class="legal-viewer-header">
+                <h3 id="legal-viewer-title">문서</h3>
+                <button id="legal-viewer-close" class="btn-close">×</button>
+            </div>
+            <div class="legal-viewer-body" id="legal-viewer-body">
+                <!-- Content will be loaded dynamically -->
+            </div>
+            <div class="legal-viewer-footer">
+                <button id="legal-viewer-ok" class="btn-primary">확인</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="config.js"></script>
+    <script src="legal-docs.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

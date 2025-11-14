@@ -717,12 +717,120 @@ function generateSessionId() {
 }
 
 // ============================================================================
+// Legal Consent System
+// ============================================================================
+
+function checkConsent() {
+    const consentData = StorageHelper.get(CONFIG.STORAGE_KEYS.CONSENT_DATA);
+    return consentData && consentData.agreedAt;
+}
+
+function showConsentModal() {
+    const modal = document.getElementById('consent-modal');
+    modal.classList.add('active');
+
+    // Setup checkboxes
+    const requiredCheckboxes = [
+        document.getElementById('consent-terms'),
+        document.getElementById('consent-privacy'),
+        document.getElementById('consent-sensitive'),
+        document.getElementById('consent-age')
+    ];
+
+    const allCheckbox = document.getElementById('consent-all');
+    const agreeBtn = document.getElementById('consent-agree-btn');
+
+    // Check if all required are checked
+    const updateAgreeButton = () => {
+        const allRequired = requiredCheckboxes.every(cb => cb.checked);
+        agreeBtn.disabled = !allRequired;
+    };
+
+    // Individual checkbox change
+    requiredCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateAgreeButton);
+    });
+
+    // All agree checkbox
+    allCheckbox.addEventListener('change', function() {
+        const checked = this.checked;
+        document.querySelectorAll('.consent-checkbox').forEach(cb => {
+            cb.checked = checked;
+        });
+        updateAgreeButton();
+    });
+
+    // View legal documents
+    document.querySelectorAll('.consent-view-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const target = this.dataset.target;
+            showLegalDocument(target);
+        });
+    });
+
+    // Disagree button
+    document.getElementById('consent-disagree-btn').addEventListener('click', () => {
+        alert('서비스 이용약관에 동의하지 않으면 서비스를 이용할 수 없습니다.');
+        // Optionally redirect or close
+    });
+
+    // Agree button
+    agreeBtn.addEventListener('click', () => {
+        const consentData = {
+            agreedAt: new Date().toISOString(),
+            terms: document.getElementById('consent-terms').checked,
+            privacy: document.getElementById('consent-privacy').checked,
+            sensitive: document.getElementById('consent-sensitive').checked,
+            improvement: document.getElementById('consent-improvement').checked,
+            age: document.getElementById('consent-age').checked
+        };
+
+        StorageHelper.set(CONFIG.STORAGE_KEYS.CONSENT_DATA, consentData);
+        modal.classList.remove('active');
+        UI.showToast('동의해주셔서 감사합니다. 서비스를 시작합니다.');
+    });
+}
+
+function showLegalDocument(docType) {
+    const viewerModal = document.getElementById('legal-viewer-modal');
+    const titleEl = document.getElementById('legal-viewer-title');
+    const bodyEl = document.getElementById('legal-viewer-body');
+
+    const doc = LEGAL_DOCS[docType];
+    if (doc) {
+        titleEl.textContent = doc.title;
+        // Simple markdown rendering (newlines and basic formatting)
+        bodyEl.innerHTML = doc.content
+            .replace(/\n/g, '<br>')
+            .replace(/### (.*?)(<br>)/g, '<h3>$1</h3>')
+            .replace(/## (.*?)(<br>)/g, '<h2>$1</h2>')
+            .replace(/# (.*?)(<br>)/g, '<h1>$1</h1>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        viewerModal.classList.add('active');
+    }
+
+    // Close buttons
+    document.getElementById('legal-viewer-close').addEventListener('click', () => {
+        viewerModal.classList.remove('active');
+    });
+    document.getElementById('legal-viewer-ok').addEventListener('click', () => {
+        viewerModal.classList.remove('active');
+    });
+}
+
+// ============================================================================
 // Application Initialization
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🧠 마음챗 - Korean Mental Health Counseling System');
     console.log('Initializing application...');
+
+    // Check consent first
+    if (!checkConsent()) {
+        console.log('⚠️ User consent not found. Showing consent modal...');
+        showConsentModal();
+    }
 
     // Initialize screens
     initializeHomeScreen();
