@@ -13,8 +13,9 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Depends, Header, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.security import APIKeyHeader
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, validator
 import uvicorn
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
@@ -65,6 +66,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Static files (Frontend)
+# Mount frontend directory for serving HTML/CSS/JS
+frontend_path = Path(__file__).parent.parent / "frontend"
+if frontend_path.exists():
+    app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
+    logger.info(f"Frontend static files mounted at /static from {frontend_path}")
+else:
+    logger.warning(f"Frontend directory not found at {frontend_path}")
 
 # Prometheus metrics
 api_requests = Counter('api_requests_total', 'Total API requests', ['method', 'endpoint', 'status'])
@@ -423,7 +433,30 @@ async def shutdown_event():
 
 @app.get("/", tags=["Root"])
 async def root():
-    """Root endpoint - API information"""
+    """Root endpoint - Serve frontend application"""
+    frontend_path = Path(__file__).parent.parent / "frontend" / "index.html"
+    if frontend_path.exists():
+        return FileResponse(str(frontend_path))
+    else:
+        # Fallback to API information if frontend not available
+        return {
+            "name": "Korean Mental Health Counseling API",
+            "version": "1.0.0",
+            "status": "running",
+            "endpoints": {
+                "docs": "/docs",
+                "health": "/api/v1/health",
+                "chat": "/api/v1/chat",
+                "metrics": "/metrics",
+                "frontend": "/static/index.html"
+            }
+        }
+
+
+@app.get("/api", tags=["Root"])
+@app.get("/api/v1", tags=["Root"])
+async def api_info():
+    """API information endpoint"""
     return {
         "name": "Korean Mental Health Counseling API",
         "version": "1.0.0",
@@ -432,7 +465,10 @@ async def root():
             "docs": "/docs",
             "health": "/api/v1/health",
             "chat": "/api/v1/chat",
-            "metrics": "/metrics"
+            "personas": "/api/v1/personas",
+            "feedback": "/api/v1/personas/{persona_id}/feedback",
+            "metrics": "/metrics",
+            "frontend": "/"
         }
     }
 

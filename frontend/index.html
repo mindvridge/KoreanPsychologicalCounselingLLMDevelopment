@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>마음챗 - AI 심리상담 서비스</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <h1 class="logo">🧠 마음챗</h1>
+                <p class="tagline">당신의 마음을 이해하는 AI 심리상담</p>
+                <div class="user-info">
+                    <button id="user-menu-btn" class="btn-icon">
+                        <span class="user-avatar">👤</span>
+                        <span id="user-name">사용자</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-container">
+        <!-- Home Screen -->
+        <div id="home-screen" class="screen active">
+            <div class="container">
+                <section class="hero">
+                    <h2>어떤 상담사와 이야기하고 싶으신가요?</h2>
+                    <p class="hero-subtitle">당신의 고민과 상황에 맞는 전문 상담사를 추천해드립니다</p>
+                </section>
+
+                <!-- User Input Form -->
+                <section class="user-input-section">
+                    <div class="input-card">
+                        <div class="input-group">
+                            <label for="user-id-input">사용자 ID (개인화 추천을 위해)</label>
+                            <input type="text" id="user-id-input" placeholder="예: user_123 (선택사항)" />
+                            <small>※ 입력하시면 개인 맞춤 추천을 받을 수 있습니다</small>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="age-range-select">연령대</label>
+                            <select id="age-range-select">
+                                <option value="">선택하세요</option>
+                                <option value="10대">10대</option>
+                                <option value="20대">20대</option>
+                                <option value="30대">30대</option>
+                                <option value="40대">40대</option>
+                                <option value="50대">50대 이상</option>
+                                <option value="60대">60대 이상</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group">
+                            <label>주요 고민 (복수 선택 가능)</label>
+                            <div class="concerns-grid" id="concerns-grid">
+                                <button class="concern-tag" data-concern="우울">우울</button>
+                                <button class="concern-tag" data-concern="불안">불안</button>
+                                <button class="concern-tag" data-concern="스트레스">스트레스</button>
+                                <button class="concern-tag" data-concern="대인관계">대인관계</button>
+                                <button class="concern-tag" data-concern="가족">가족</button>
+                                <button class="concern-tag" data-concern="직장">직장</button>
+                                <button class="concern-tag" data-concern="학업">학업</button>
+                                <button class="concern-tag" data-concern="진로">진로</button>
+                                <button class="concern-tag" data-concern="연애">연애</button>
+                                <button class="concern-tag" data-concern="결혼">결혼</button>
+                                <button class="concern-tag" data-concern="트라우마">트라우마</button>
+                                <button class="concern-tag" data-concern="중독">중독</button>
+                                <button class="concern-tag" data-concern="분노">분노</button>
+                                <button class="concern-tag" data-concern="자존감">자존감</button>
+                                <button class="concern-tag" data-concern="수면">수면 문제</button>
+                            </div>
+                        </div>
+
+                        <button id="find-counselor-btn" class="btn-primary">상담사 추천받기</button>
+                    </div>
+                </section>
+
+                <!-- Recommended Counselors -->
+                <section id="recommendations-section" class="recommendations-section" style="display: none;">
+                    <h3>추천 상담사</h3>
+                    <div id="recommendations-container" class="counselors-grid"></div>
+                </section>
+
+                <!-- All Counselors -->
+                <section class="all-counselors-section">
+                    <h3>전체 상담사 보기</h3>
+                    <button id="load-all-counselors-btn" class="btn-secondary">전체 상담사 목록 불러오기</button>
+                    <div id="all-counselors-container" class="counselors-grid" style="display: none;"></div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Chat Screen -->
+        <div id="chat-screen" class="screen">
+            <div class="chat-container">
+                <!-- Chat Header -->
+                <div class="chat-header">
+                    <button id="back-to-home-btn" class="btn-icon">← 돌아가기</button>
+                    <div class="counselor-info">
+                        <div class="counselor-avatar" id="chat-counselor-avatar">👨‍⚕️</div>
+                        <div>
+                            <h4 id="chat-counselor-name">상담사</h4>
+                            <p id="chat-counselor-specialty">전문 분야</p>
+                        </div>
+                    </div>
+                    <button id="end-session-btn" class="btn-danger-small">상담 종료</button>
+                </div>
+
+                <!-- Chat Messages -->
+                <div id="chat-messages" class="chat-messages">
+                    <div class="welcome-message">
+                        <p>상담사와의 대화가 시작됩니다. 편안하게 이야기 나눠보세요.</p>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="chat-input-container">
+                    <div class="chat-input-wrapper">
+                        <textarea id="chat-input" placeholder="메시지를 입력하세요..." rows="1"></textarea>
+                        <button id="send-message-btn" class="btn-send">전송</button>
+                    </div>
+                    <div class="chat-info">
+                        <small>💡 위기 상황 시 즉시 전문가의 도움을 받으세요: 자살예방상담전화 ☎️ 1393</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feedback Screen -->
+        <div id="feedback-screen" class="screen">
+            <div class="container">
+                <div class="feedback-card">
+                    <h2>상담 피드백</h2>
+                    <p class="feedback-subtitle">상담이 어떠셨나요? 여러분의 피드백이 서비스 개선에 큰 도움이 됩니다.</p>
+
+                    <form id="feedback-form">
+                        <div class="input-group">
+                            <label>상담사</label>
+                            <p id="feedback-counselor-name" class="feedback-value"></p>
+                        </div>
+
+                        <div class="input-group">
+                            <label>전반적인 만족도</label>
+                            <div class="rating-stars" id="rating-stars">
+                                <span class="star" data-rating="1">⭐</span>
+                                <span class="star" data-rating="2">⭐</span>
+                                <span class="star" data-rating="3">⭐</span>
+                                <span class="star" data-rating="4">⭐</span>
+                                <span class="star" data-rating="5">⭐</span>
+                            </div>
+                            <input type="hidden" id="rating-value" value="0" />
+                        </div>
+
+                        <div class="input-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="helpful-check" checked />
+                                <span>도움이 되었습니다</span>
+                            </label>
+                        </div>
+
+                        <div class="input-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="appropriate-check" checked />
+                                <span>적절한 조언이었습니다</span>
+                            </label>
+                        </div>
+
+                        <div class="input-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="recommend-check" checked />
+                                <span>다시 이용하고 싶습니다</span>
+                            </label>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="feedback-text">추가 의견 (선택사항)</label>
+                            <textarea id="feedback-text" rows="4" placeholder="상담에 대한 의견을 자유롭게 작성해주세요"></textarea>
+                        </div>
+
+                        <div class="button-group">
+                            <button type="button" id="skip-feedback-btn" class="btn-secondary">건너뛰기</button>
+                            <button type="submit" class="btn-primary">제출하기</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Dashboard Screen -->
+        <div id="dashboard-screen" class="screen">
+            <div class="container">
+                <h2>내 상담 현황</h2>
+
+                <div class="dashboard-grid">
+                    <!-- Stats Cards -->
+                    <div class="stat-card">
+                        <h4>총 상담 횟수</h4>
+                        <p class="stat-value" id="total-sessions">0회</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4>피드백 제출</h4>
+                        <p class="stat-value" id="total-feedback">0회</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4>선호 상담사</h4>
+                        <p class="stat-value" id="favorite-counselor">없음</p>
+                    </div>
+                </div>
+
+                <!-- User Preferences -->
+                <div class="preferences-section">
+                    <h3>나의 상담사 선호도</h3>
+                    <div id="user-preferences-container"></div>
+                </div>
+
+                <button id="back-to-home-from-dashboard-btn" class="btn-secondary">홈으로 돌아가기</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 마음챗 - Korean Psychological Counseling LLM</p>
+            <p>🚨 위기 상황: 자살예방상담전화 1393 | 정신건강위기상담 1577-0199</p>
+        </div>
+    </footer>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p>처리 중입니다...</p>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Scripts -->
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
