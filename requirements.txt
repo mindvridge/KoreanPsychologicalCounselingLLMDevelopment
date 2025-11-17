@@ -51,3 +51,16 @@ alembic>=1.12.0  # Database migrations (optional)
 # Additional Utilities
 tqdm>=4.66.0
 requests>=2.31.0
+
+# Voice Interface (Speech-to-Text and Text-to-Speech)
+openai-whisper>=20231117  # OpenAI Whisper for Korean STT
+gtts>=2.4.0  # Google Text-to-Speech for Korean TTS
+soundfile>=0.12.0  # Audio file handling
+librosa>=0.10.0  # Audio processing
+pydub>=0.25.0  # Audio format conversion
+webrtcvad>=2.0.10  # Voice activity detection
+scipy>=1.11.0  # Signal processing
+
+# PDF Generation for Reports
+reportlab>=4.0.0  # PDF generation
+weasyprint>=60.0  # HTML to PDF conversion

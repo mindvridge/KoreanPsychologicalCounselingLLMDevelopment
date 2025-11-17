@@ -133,6 +133,116 @@ class APIClient {
             method: 'GET'
         });
     }
+
+    // Voice Interface Endpoints
+    async synthesizeSpeech(text, language = 'ko', slow = false, emotion = null) {
+        return this.request('/voice/synthesize', {
+            method: 'POST',
+            body: JSON.stringify({
+                text: text,
+                language: language,
+                slow: slow,
+                emotion: emotion
+            })
+        });
+    }
+
+    async transcribeAudio(audioBlob, language = 'ko') {
+        const formData = new FormData();
+        formData.append('audio_file', audioBlob, 'recording.webm');
+        formData.append('language', language);
+
+        const url = `${this.baseURL}/voice/transcribe`;
+        const headers = {};
+        if (this.apiKey) {
+            headers['X-API-Key'] = this.apiKey;
+        }
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: headers,
+            body: formData
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail || `HTTP ${response.status}`);
+        }
+
+        return await response.json();
+    }
+
+    async getVoiceStats() {
+        return this.request('/voice/stats', {
+            method: 'GET'
+        });
+    }
+
+    // Export Endpoints
+    async exportConversationCSV(sessionId, conversationHistory, includeMetadata = true) {
+        const response = await fetch(`${this.baseURL}/export/conversation/csv`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(this.apiKey ? { 'X-API-Key': this.apiKey } : {})
+            },
+            body: JSON.stringify({
+                session_id: sessionId,
+                conversation_history: conversationHistory,
+                include_metadata: includeMetadata
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Export failed: ${response.statusText}`);
+        }
+
+        return response.blob();
+    }
+
+    async exportConversationJSON(sessionId, conversationHistory) {
+        const response = await fetch(`${this.baseURL}/export/conversation/json`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(this.apiKey ? { 'X-API-Key': this.apiKey } : {})
+            },
+            body: JSON.stringify({
+                session_id: sessionId,
+                conversation_history: conversationHistory,
+                include_metadata: true
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Export failed: ${response.statusText}`);
+        }
+
+        return response.blob();
+    }
+
+    async exportSessionPDF(sessionId, counselorName, counselorType, conversationHistory, emotionAnalysis = null) {
+        const response = await fetch(`${this.baseURL}/export/session/pdf`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(this.apiKey ? { 'X-API-Key': this.apiKey } : {})
+            },
+            body: JSON.stringify({
+                session_id: sessionId,
+                counselor_name: counselorName,
+                counselor_type: counselorType,
+                conversation_history: conversationHistory,
+                emotion_analysis: emotionAnalysis
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Export failed: ${response.statusText}`);
+        }
+
+        return response.blob();
+    }
 }
 
 // Initialize API Client
@@ -409,7 +519,9 @@ function setupChatEventListeners() {
                 AppState.userId
             );
 
-            addBotMessage(response.response);
+            // Extract emotion for TTS
+            const emotion = response.emotion?.primary_emotion || 'neutral';
+            await addBotMessage(response.response, emotion);
 
             // Handle safety checks
             if (response.safety_check?.risk_level === 'HIGH' || response.safety_check?.risk_level === 'CRITICAL') {
@@ -472,7 +584,7 @@ function addUserMessage(text) {
     AppState.chatHistory.push({ role: 'user', content: text, time: new Date().toISOString() });
 }
 
-function addBotMessage(text) {
+async function addBotMessage(text, emotion = 'neutral') {
     const messagesContainer = document.getElementById('chat-messages');
     const avatar = UI.getAvatar(AppState.currentCounselor?.id);
     const messageDiv = document.createElement('div');
@@ -480,7 +592,7 @@ function addBotMessage(text) {
     messageDiv.innerHTML = `
         <div class="message-avatar">${avatar}</div>
         <div class="message-content">
-            <div>${text}</div>
+            <div class="message-text">${text}</div>
             <div class="message-time">${UI.formatTime()}</div>
         </div>
     `;
@@ -488,6 +600,19 @@ function addBotMessage(text) {
     scrollToBottom();
 
     AppState.chatHistory.push({ role: 'bot', content: text, time: new Date().toISOString() });
+
+    // Auto-play voice response if enabled
+    if (VoiceManager.autoPlayEnabled && text) {
+        try {
+            const audioInfo = await VoiceManager.playResponseAudio(text, emotion);
+            if (audioInfo) {
+                const messageContent = messageDiv.querySelector('.message-content');
+                VoiceManager.addAudioControlsToMessage(messageContent, audioInfo);
+            }
+        } catch (error) {
+            console.error('Failed to play voice response:', error);
+        }
+    }
 }
 
 function addSystemMessage(text) {
@@ -819,6 +944,439 @@ function showLegalDocument(docType) {
 }
 
 // ============================================================================
+// Export Manager
+// ============================================================================
+
+const ExportManager = {
+    isExporting: false,
+
+    init() {
+        console.log('📥 Initializing Export Manager...');
+
+        const exportBtn = document.getElementById('export-btn');
+        const exportMenu = document.getElementById('export-menu');
+        const exportCSVBtn = document.getElementById('export-csv-btn');
+        const exportJSONBtn = document.getElementById('export-json-btn');
+        const exportPDFBtn = document.getElementById('export-pdf-btn');
+
+        if (exportBtn && exportMenu) {
+            // Toggle dropdown
+            exportBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                exportMenu.classList.toggle('active');
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', () => {
+                exportMenu.classList.remove('active');
+            });
+
+            exportMenu.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        }
+
+        if (exportCSVBtn) {
+            exportCSVBtn.addEventListener('click', () => this.exportToCSV());
+        }
+
+        if (exportJSONBtn) {
+            exportJSONBtn.addEventListener('click', () => this.exportToJSON());
+        }
+
+        if (exportPDFBtn) {
+            exportPDFBtn.addEventListener('click', () => this.exportToPDF());
+        }
+
+        console.log('✅ Export Manager initialized');
+    },
+
+    async exportToCSV() {
+        if (this.isExporting) return;
+        this.isExporting = true;
+
+        try {
+            UI.showToast('CSV 파일 생성 중...');
+
+            const blob = await api.exportConversationCSV(
+                AppState.currentSession.id,
+                AppState.chatHistory
+            );
+
+            this.downloadBlob(blob, `conversation_${AppState.currentSession.id}.csv`);
+            UI.showToast('CSV 파일이 다운로드되었습니다');
+        } catch (error) {
+            console.error('CSV export error:', error);
+            UI.showToast('CSV 내보내기에 실패했습니다');
+        } finally {
+            this.isExporting = false;
+            this.closeMenu();
+        }
+    },
+
+    async exportToJSON() {
+        if (this.isExporting) return;
+        this.isExporting = true;
+
+        try {
+            UI.showToast('JSON 파일 생성 중...');
+
+            const blob = await api.exportConversationJSON(
+                AppState.currentSession.id,
+                AppState.chatHistory
+            );
+
+            this.downloadBlob(blob, `conversation_${AppState.currentSession.id}.json`);
+            UI.showToast('JSON 파일이 다운로드되었습니다');
+        } catch (error) {
+            console.error('JSON export error:', error);
+            UI.showToast('JSON 내보내기에 실패했습니다');
+        } finally {
+            this.isExporting = false;
+            this.closeMenu();
+        }
+    },
+
+    async exportToPDF() {
+        if (this.isExporting) return;
+        this.isExporting = true;
+
+        try {
+            UI.showToast('PDF 보고서 생성 중...');
+
+            const counselor = AppState.currentCounselor;
+            const blob = await api.exportSessionPDF(
+                AppState.currentSession.id,
+                counselor?.display_name || counselor?.name || 'AI 상담사',
+                counselor?.specialty || '일반 상담',
+                AppState.chatHistory,
+                null // emotion analysis can be added later
+            );
+
+            this.downloadBlob(blob, `session_report_${AppState.currentSession.id}.pdf`);
+            UI.showToast('PDF 보고서가 다운로드되었습니다');
+        } catch (error) {
+            console.error('PDF export error:', error);
+            UI.showToast('PDF 내보내기에 실패했습니다. reportlab이 설치되어 있는지 확인하세요.');
+        } finally {
+            this.isExporting = false;
+            this.closeMenu();
+        }
+    },
+
+    downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    },
+
+    closeMenu() {
+        const exportMenu = document.getElementById('export-menu');
+        if (exportMenu) {
+            exportMenu.classList.remove('active');
+        }
+    }
+};
+
+// ============================================================================
+// Voice Interface Manager
+// ============================================================================
+
+const VoiceManager = {
+    mediaRecorder: null,
+    audioChunks: [],
+    isRecording: false,
+    currentAudio: null,
+    autoPlayEnabled: true,
+
+    async init() {
+        console.log('🎤 Initializing Voice Manager...');
+
+        // Check browser support
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            console.warn('Voice recording not supported in this browser');
+            this.disableVoiceFeatures();
+            return;
+        }
+
+        // Initialize UI elements
+        const voiceBtn = document.getElementById('voice-input-btn');
+        const stopBtn = document.getElementById('stop-recording-btn');
+        const autoPlayCheckbox = document.getElementById('auto-play-voice');
+
+        if (voiceBtn) {
+            voiceBtn.addEventListener('click', () => this.toggleRecording());
+        }
+
+        if (stopBtn) {
+            stopBtn.addEventListener('click', () => this.stopRecording());
+        }
+
+        if (autoPlayCheckbox) {
+            autoPlayCheckbox.addEventListener('change', (e) => {
+                this.autoPlayEnabled = e.target.checked;
+                console.log(`Auto-play voice: ${this.autoPlayEnabled}`);
+            });
+        }
+
+        console.log('✅ Voice Manager initialized');
+    },
+
+    disableVoiceFeatures() {
+        const voiceBtn = document.getElementById('voice-input-btn');
+        if (voiceBtn) {
+            voiceBtn.disabled = true;
+            voiceBtn.title = '브라우저가 음성 녹음을 지원하지 않습니다';
+        }
+    },
+
+    async toggleRecording() {
+        if (this.isRecording) {
+            await this.stopRecording();
+        } else {
+            await this.startRecording();
+        }
+    },
+
+    async startRecording() {
+        try {
+            console.log('🎙️ Starting voice recording...');
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    sampleRate: 16000
+                }
+            });
+
+            this.mediaRecorder = new MediaRecorder(stream, {
+                mimeType: 'audio/webm;codecs=opus'
+            });
+
+            this.audioChunks = [];
+
+            this.mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    this.audioChunks.push(event.data);
+                }
+            };
+
+            this.mediaRecorder.onstop = async () => {
+                console.log('📝 Recording stopped, processing audio...');
+                await this.processRecording();
+
+                // Stop all tracks
+                stream.getTracks().forEach(track => track.stop());
+            };
+
+            this.mediaRecorder.start();
+            this.isRecording = true;
+
+            // Update UI
+            this.updateRecordingUI(true);
+
+            console.log('🔴 Recording started');
+        } catch (error) {
+            console.error('Failed to start recording:', error);
+            UI.showToast('마이크 접근에 실패했습니다. 권한을 확인해주세요.');
+        }
+    },
+
+    async stopRecording() {
+        if (this.mediaRecorder && this.isRecording) {
+            this.mediaRecorder.stop();
+            this.isRecording = false;
+            this.updateRecordingUI(false);
+        }
+    },
+
+    updateRecordingUI(isRecording) {
+        const voiceBtn = document.getElementById('voice-input-btn');
+        const voiceStatus = document.getElementById('voice-status');
+
+        if (voiceBtn) {
+            if (isRecording) {
+                voiceBtn.classList.add('recording');
+                voiceBtn.innerHTML = '⏹️';
+            } else {
+                voiceBtn.classList.remove('recording');
+                voiceBtn.innerHTML = '🎤';
+            }
+        }
+
+        if (voiceStatus) {
+            voiceStatus.style.display = isRecording ? 'flex' : 'none';
+        }
+    },
+
+    async processRecording() {
+        if (this.audioChunks.length === 0) {
+            UI.showToast('녹음된 오디오가 없습니다');
+            return;
+        }
+
+        const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+        console.log(`Audio blob size: ${audioBlob.size} bytes`);
+
+        // Show transcribing indicator
+        this.showTranscribingIndicator();
+
+        try {
+            // Send to API for transcription
+            const result = await api.transcribeAudio(audioBlob);
+
+            if (result.status === 'success' && result.transcription) {
+                const transcribedText = result.transcription.text;
+                console.log(`Transcribed: ${transcribedText}`);
+
+                // Put transcribed text in chat input
+                const chatInput = document.getElementById('chat-input');
+                if (chatInput) {
+                    chatInput.value = transcribedText;
+                    chatInput.focus();
+
+                    // Auto-resize textarea
+                    chatInput.style.height = 'auto';
+                    chatInput.style.height = chatInput.scrollHeight + 'px';
+                }
+
+                UI.showToast(`음성이 텍스트로 변환되었습니다 (신뢰도: ${Math.round(result.transcription.confidence * 100)}%)`);
+            } else {
+                throw new Error('Transcription failed');
+            }
+        } catch (error) {
+            console.error('Transcription error:', error);
+            UI.showToast('음성 인식에 실패했습니다. 다시 시도해주세요.');
+        } finally {
+            this.hideTranscribingIndicator();
+        }
+    },
+
+    showTranscribingIndicator() {
+        const voiceStatus = document.getElementById('voice-status');
+        if (voiceStatus) {
+            voiceStatus.innerHTML = `
+                <div class="transcribing-indicator">
+                    <div class="transcribing-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                    <span>음성을 텍스트로 변환 중...</span>
+                </div>
+            `;
+            voiceStatus.style.display = 'flex';
+        }
+    },
+
+    hideTranscribingIndicator() {
+        const voiceStatus = document.getElementById('voice-status');
+        if (voiceStatus) {
+            voiceStatus.style.display = 'none';
+            voiceStatus.innerHTML = `
+                <div class="recording-indicator">
+                    <span class="recording-dot"></span>
+                    <span id="voice-status-text">녹음 중...</span>
+                </div>
+                <button id="stop-recording-btn" class="btn-stop-recording">녹음 중지</button>
+            `;
+        }
+    },
+
+    async playResponseAudio(text, emotion = 'neutral') {
+        if (!this.autoPlayEnabled) {
+            console.log('Auto-play disabled, skipping TTS');
+            return null;
+        }
+
+        try {
+            console.log(`🔊 Generating speech for response (emotion: ${emotion})...`);
+
+            const result = await api.synthesizeSpeech(text, 'ko', false, emotion);
+
+            if (result.status === 'success' && result.audio_base64) {
+                // Decode base64 audio
+                const audioData = atob(result.audio_base64);
+                const arrayBuffer = new ArrayBuffer(audioData.length);
+                const uint8Array = new Uint8Array(arrayBuffer);
+
+                for (let i = 0; i < audioData.length; i++) {
+                    uint8Array[i] = audioData.charCodeAt(i);
+                }
+
+                const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+
+                // Create and play audio
+                if (this.currentAudio) {
+                    this.currentAudio.pause();
+                    URL.revokeObjectURL(this.currentAudio.src);
+                }
+
+                this.currentAudio = new Audio(audioUrl);
+                this.currentAudio.play();
+
+                console.log(`✅ Playing audio (duration: ~${result.duration_estimate}s)`);
+
+                return {
+                    audio: this.currentAudio,
+                    duration: result.duration_estimate,
+                    cached: result.cached
+                };
+            }
+        } catch (error) {
+            console.error('TTS error:', error);
+            // Don't show error toast for TTS failures (non-critical)
+        }
+
+        return null;
+    },
+
+    addAudioControlsToMessage(messageElement, audioInfo) {
+        if (!audioInfo || !audioInfo.audio) return;
+
+        const controlsDiv = document.createElement('div');
+        controlsDiv.className = 'message-audio-controls';
+        controlsDiv.innerHTML = `
+            <button class="btn-play-audio">
+                <span class="play-icon">🔊</span>
+                <span>다시 듣기</span>
+            </button>
+            <span class="audio-duration">~${audioInfo.duration.toFixed(1)}초</span>
+        `;
+
+        const playBtn = controlsDiv.querySelector('.btn-play-audio');
+        playBtn.addEventListener('click', () => {
+            if (audioInfo.audio.paused) {
+                audioInfo.audio.currentTime = 0;
+                audioInfo.audio.play();
+                playBtn.querySelector('.play-icon').textContent = '⏸️';
+            } else {
+                audioInfo.audio.pause();
+                playBtn.querySelector('.play-icon').textContent = '🔊';
+            }
+        });
+
+        audioInfo.audio.addEventListener('ended', () => {
+            playBtn.querySelector('.play-icon').textContent = '🔊';
+        });
+
+        messageElement.appendChild(controlsDiv);
+    },
+
+    stopCurrentAudio() {
+        if (this.currentAudio) {
+            this.currentAudio.pause();
+            this.currentAudio.currentTime = 0;
+        }
+    }
+};
+
+// ============================================================================
 // Application Initialization
 // ============================================================================
 
@@ -834,6 +1392,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize screens
     initializeHomeScreen();
+
+    // Initialize Voice Manager
+    VoiceManager.init();
+
+    // Initialize Export Manager
+    ExportManager.init();
 
     // User menu button (for future dashboard access)
     document.getElementById('user-menu-btn').addEventListener('click', () => {

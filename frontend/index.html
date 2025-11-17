@@ -111,7 +111,17 @@
                             <p id="chat-counselor-specialty">전문 분야</p>
                         </div>
                     </div>
-                    <button id="end-session-btn" class="btn-danger-small">상담 종료</button>
+                    <div class="chat-header-actions">
+                        <div class="export-dropdown">
+                            <button id="export-btn" class="btn-secondary-small">📥 내보내기</button>
+                            <div class="export-menu" id="export-menu">
+                                <button id="export-csv-btn" class="export-option">📄 CSV로 저장</button>
+                                <button id="export-json-btn" class="export-option">📋 JSON으로 저장</button>
+                                <button id="export-pdf-btn" class="export-option">📑 PDF 보고서</button>
+                            </div>
+                        </div>
+                        <button id="end-session-btn" class="btn-danger-small">상담 종료</button>
+                    </div>
                 </div>
 
                 <!-- Chat Messages -->
@@ -124,8 +134,24 @@
                 <!-- Chat Input -->
                 <div class="chat-input-container">
                     <div class="chat-input-wrapper">
+                        <button id="voice-input-btn" class="btn-voice" title="음성으로 입력하기">
+                            🎤
+                        </button>
                         <textarea id="chat-input" placeholder="메시지를 입력하세요..." rows="1"></textarea>
                         <button id="send-message-btn" class="btn-send">전송</button>
+                    </div>
+                    <div class="voice-status" id="voice-status" style="display: none;">
+                        <div class="recording-indicator">
+                            <span class="recording-dot"></span>
+                            <span id="voice-status-text">녹음 중...</span>
+                        </div>
+                        <button id="stop-recording-btn" class="btn-stop-recording">녹음 중지</button>
+                    </div>
+                    <div class="voice-controls" id="voice-controls">
+                        <label class="voice-toggle">
+                            <input type="checkbox" id="auto-play-voice" checked>
+                            <span>응답을 음성으로 듣기</span>
+                        </label>
                     </div>
                     <div class="chat-info">
                         <small>💡 위기 상황 시 즉시 전문가의 도움을 받으세요: 자살예방상담전화 ☎️ 1393</small>

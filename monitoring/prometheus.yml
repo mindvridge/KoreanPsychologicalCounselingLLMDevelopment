@@ -1,0 +1,44 @@
+# Prometheus Configuration for Korean Mental Health Counseling System
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Load rules
+rule_files:
+  - "alert_rules.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Mental Health API
+  - job_name: 'mental_health_api'
+    static_configs:
+      - targets: ['localhost:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter (system metrics)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+
+  # Redis (if available)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['localhost:9121']
+
+  # PostgreSQL (if available)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['localhost:9187']

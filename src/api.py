@@ -11,12 +11,13 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Depends, Header, Request, status
+from fastapi import FastAPI, HTTPException, Depends, Header, Request, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, validator
+import base64
 import uvicorn
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -1719,6 +1720,834 @@ async def get_learned_weights(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting learned weights: {str(e)}"
+        )
+
+
+# ============================================================================
+# Voice Interface Endpoints
+# ============================================================================
+
+# Voice service (lazy loaded)
+_voice_service_instance = None
+
+def get_voice_service_instance():
+    """Get voice service instance (lazy loaded)"""
+    global _voice_service_instance
+    if _voice_service_instance is None:
+        try:
+            from src.voice_service import get_voice_service
+            _voice_service_instance = get_voice_service()
+        except ImportError as e:
+            logger.warning(f"Voice service not available: {e}")
+            _voice_service_instance = None
+    return _voice_service_instance
+
+
+class TTSRequest(BaseModel):
+    """Text-to-Speech request"""
+    text: str = Field(..., min_length=1, max_length=5000, description="Text to convert to speech")
+    language: str = Field(default="ko", description="Language code (ko, en)")
+    slow: bool = Field(default=False, description="Speak slowly for clarity")
+    emotion: Optional[str] = Field(None, description="User emotion for empathetic speech")
+
+
+class VoiceChatRequest(BaseModel):
+    """Voice chat request with audio transcription"""
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
+    persona_id: Optional[str] = None
+    audio_base64: str = Field(..., description="Base64 encoded audio data")
+    audio_format: str = Field(default="wav", description="Audio format (wav, mp3, webm)")
+    language: str = Field(default="ko", description="Language for transcription")
+    generate_audio_response: bool = Field(default=True, description="Generate TTS for response")
+
+
+@app.post("/api/v1/voice/transcribe", tags=["Voice"])
+@limiter.limit("30/minute")
+async def transcribe_audio(
+    request: Request,
+    audio_file: UploadFile = File(..., description="Audio file to transcribe"),
+    language: str = Form(default="ko", description="Language code")
+):
+    """
+    Transcribe speech audio to text (Speech-to-Text)
+
+    Supports: WAV, MP3, M4A, WEBM formats
+    Max file size: 25MB
+    Max duration: 5 minutes
+
+    Returns transcribed text with confidence score and timestamps
+    """
+    voice_service = get_voice_service_instance()
+    if voice_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Voice service not available. Please install required dependencies."
+        )
+
+    try:
+        # Read audio file
+        audio_data = await audio_file.read()
+
+        if len(audio_data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Empty audio file"
+            )
+
+        # Validate format
+        is_valid, format_info = voice_service.validate_audio_format(audio_data)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid audio format: {format_info}"
+            )
+
+        # Transcribe
+        result = voice_service.transcribe_audio(
+            audio_data=audio_data,
+            audio_format=format_info,
+            language=language
+        )
+
+        api_requests.labels(method="POST", endpoint="/voice/transcribe", status="success").inc()
+
+        return {
+            "status": "success",
+            "transcription": result
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Transcription error: {e}", exc_info=True)
+        api_requests.labels(method="POST", endpoint="/voice/transcribe", status="error").inc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Transcription failed: {str(e)}"
+        )
+
+
+@app.post("/api/v1/voice/synthesize", tags=["Voice"])
+@limiter.limit("60/minute")
+async def synthesize_speech(request: Request, tts_request: TTSRequest):
+    """
+    Convert text to speech audio (Text-to-Speech)
+
+    Returns MP3 audio data as base64 encoded string
+    Supports emotion-aware speech synthesis for empathetic responses
+    """
+    voice_service = get_voice_service_instance()
+    if voice_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Voice service not available. Please install required dependencies."
+        )
+
+    try:
+        # Check if emotion-aware synthesis is supported
+        if hasattr(voice_service, 'synthesize_empathetic_response') and tts_request.emotion:
+            result = voice_service.synthesize_empathetic_response(
+                text=tts_request.text,
+                user_emotion=tts_request.emotion,
+                language=tts_request.language
+            )
+        else:
+            result = voice_service.synthesize_speech(
+                text=tts_request.text,
+                language=tts_request.language,
+                slow=tts_request.slow,
+                emotion=tts_request.emotion
+            )
+
+        # Encode audio to base64
+        audio_base64 = base64.b64encode(result["audio_data"]).decode("utf-8")
+
+        api_requests.labels(method="POST", endpoint="/voice/synthesize", status="success").inc()
+
+        return {
+            "status": "success",
+            "audio_base64": audio_base64,
+            "format": result["format"],
+            "text_length": result["text_length"],
+            "duration_estimate": result["duration_estimate"],
+            "cached": result.get("cached", False)
+        }
+
+    except Exception as e:
+        logger.error(f"Speech synthesis error: {e}", exc_info=True)
+        api_requests.labels(method="POST", endpoint="/voice/synthesize", status="error").inc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Speech synthesis failed: {str(e)}"
+        )
+
+
+@app.post("/api/v1/voice/synthesize/stream", tags=["Voice"])
+@limiter.limit("60/minute")
+async def synthesize_speech_stream(request: Request, tts_request: TTSRequest):
+    """
+    Stream synthesized speech audio directly (for playback)
+
+    Returns audio stream as MP3 file
+    """
+    voice_service = get_voice_service_instance()
+    if voice_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Voice service not available"
+        )
+
+    try:
+        result = voice_service.synthesize_speech(
+            text=tts_request.text,
+            language=tts_request.language,
+            slow=tts_request.slow
+        )
+
+        # Stream audio directly
+        audio_stream = io.BytesIO(result["audio_data"])
+
+        return StreamingResponse(
+            audio_stream,
+            media_type="audio/mpeg",
+            headers={
+                "Content-Disposition": "inline; filename=speech.mp3",
+                "Content-Length": str(len(result["audio_data"]))
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Speech streaming error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Speech streaming failed: {str(e)}"
+        )
+
+
+@app.post("/api/v1/voice/chat", tags=["Voice"])
+@limiter.limit("20/minute")
+async def voice_chat(request: Request, voice_request: VoiceChatRequest):
+    """
+    Complete voice-based chat: transcribe audio → process message → generate audio response
+
+    Full voice conversation pipeline:
+    1. Transcribe user's speech to text
+    2. Process through mental health counseling system
+    3. Generate speech audio for response (optional)
+
+    Returns both text and audio response
+    """
+    voice_service = get_voice_service_instance()
+    if voice_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Voice service not available"
+        )
+
+    if mental_health_system is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Mental health system not initialized"
+        )
+
+    try:
+        # 1. Decode and transcribe audio
+        try:
+            audio_data = base64.b64decode(voice_request.audio_base64)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid base64 audio data"
+            )
+
+        transcription = voice_service.transcribe_audio(
+            audio_data=audio_data,
+            audio_format=voice_request.audio_format,
+            language=voice_request.language
+        )
+
+        user_text = transcription["text"]
+
+        if not user_text.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No speech detected in audio"
+            )
+
+        # 2. Process through mental health system
+        session_id = voice_request.session_id or str(uuid.uuid4())
+
+        result = mental_health_system.process_message(
+            session_id=session_id,
+            user_message=user_text,
+            conversation_history=[]
+        )
+
+        response_text = result.get("response", "")
+
+        # 3. Generate audio response if requested
+        audio_response = None
+        if voice_request.generate_audio_response and response_text:
+            # Use emotion-aware synthesis based on detected emotion
+            user_emotion = result.get("emotion", {}).get("primary_emotion", "neutral")
+
+            if hasattr(voice_service, 'synthesize_empathetic_response'):
+                tts_result = voice_service.synthesize_empathetic_response(
+                    text=response_text,
+                    user_emotion=user_emotion,
+                    language=voice_request.language
+                )
+            else:
+                tts_result = voice_service.synthesize_speech(
+                    text=response_text,
+                    language=voice_request.language
+                )
+
+            audio_response = {
+                "audio_base64": base64.b64encode(tts_result["audio_data"]).decode("utf-8"),
+                "format": tts_result["format"],
+                "duration_estimate": tts_result["duration_estimate"]
+            }
+
+        api_requests.labels(method="POST", endpoint="/voice/chat", status="success").inc()
+
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "transcription": {
+                "text": user_text,
+                "confidence": transcription["confidence"],
+                "duration": transcription["duration"]
+            },
+            "response": {
+                "text": response_text,
+                "emotion": result.get("emotion", {}),
+                "safety": result.get("safety", {}),
+                "crisis_detected": result.get("crisis_detected", False)
+            },
+            "audio_response": audio_response
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Voice chat error: {e}", exc_info=True)
+        api_requests.labels(method="POST", endpoint="/voice/chat", status="error").inc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Voice chat failed: {str(e)}"
+        )
+
+
+@app.get("/api/v1/voice/stats", tags=["Voice"])
+async def get_voice_stats():
+    """
+    Get voice service statistics
+
+    Returns:
+    - Total STT/TTS requests
+    - Total audio processed (seconds)
+    - Cache size
+    - Error count
+    """
+    voice_service = get_voice_service_instance()
+    if voice_service is None:
+        return {
+            "status": "unavailable",
+            "message": "Voice service not available"
+        }
+
+    return {
+        "status": "available",
+        "stats": voice_service.get_stats()
+    }
+
+
+@app.delete("/api/v1/voice/cache", tags=["Voice"])
+async def clear_voice_cache():
+    """Clear TTS audio cache"""
+    voice_service = get_voice_service_instance()
+    if voice_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Voice service not available"
+        )
+
+    count = voice_service.clear_cache()
+    return {
+        "status": "success",
+        "files_deleted": count,
+        "message": f"Cleared {count} cached audio files"
+    }
+
+
+# ============================================================================
+# Data Export Endpoints
+# ============================================================================
+
+# Export service (lazy loaded)
+_export_service_instance = None
+
+def get_export_service_instance():
+    """Get export service instance (lazy loaded)"""
+    global _export_service_instance
+    if _export_service_instance is None:
+        try:
+            from src.export_service import get_export_service
+            _export_service_instance = get_export_service()
+        except ImportError as e:
+            logger.warning(f"Export service not available: {e}")
+            _export_service_instance = None
+    return _export_service_instance
+
+
+class ExportConversationRequest(BaseModel):
+    """Request for exporting conversation"""
+    session_id: str = Field(..., description="Session ID")
+    conversation_history: List[Dict[str, Any]] = Field(..., description="Conversation messages")
+    include_metadata: bool = Field(default=True, description="Include timestamps and metadata")
+    format: str = Field(default="csv", description="Export format: csv, json, pdf")
+
+
+class ExportAssessmentRequest(BaseModel):
+    """Request for exporting assessment results"""
+    user_id: Optional[str] = None
+    assessment_type: str = Field(..., description="PHQ-9, GAD-7, or K-10")
+    score: int = Field(..., ge=0, description="Assessment score")
+    severity: str = Field(..., description="Severity level")
+    responses: List[Dict[str, Any]] = Field(default=[], description="Individual responses")
+    recommendations: List[str] = Field(default=[], description="Recommendations")
+
+
+class SessionReportRequest(BaseModel):
+    """Request for generating session report"""
+    session_id: str
+    counselor_name: Optional[str] = "AI 상담사"
+    counselor_type: Optional[str] = "일반 상담"
+    conversation_history: List[Dict[str, Any]]
+    emotion_analysis: Optional[Dict[str, Any]] = None
+
+
+@app.post("/api/v1/export/conversation/csv", tags=["Export"])
+@limiter.limit("10/minute")
+async def export_conversation_csv(request: Request, export_request: ExportConversationRequest):
+    """
+    Export conversation history to CSV file
+
+    Returns downloadable CSV file with conversation messages
+    """
+    export_service = get_export_service_instance()
+    if export_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Export service not available"
+        )
+
+    try:
+        csv_data = export_service.export_conversation_to_csv(
+            conversation_history=export_request.conversation_history,
+            session_id=export_request.session_id,
+            include_metadata=export_request.include_metadata
+        )
+
+        filename = f"conversation_{export_request.session_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+
+        return StreamingResponse(
+            io.BytesIO(csv_data),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Length": str(len(csv_data))
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"CSV export error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Export failed: {str(e)}"
+        )
+
+
+@app.post("/api/v1/export/conversation/json", tags=["Export"])
+@limiter.limit("10/minute")
+async def export_conversation_json(request: Request, export_request: ExportConversationRequest):
+    """
+    Export conversation history to JSON file
+
+    Returns downloadable JSON file with full conversation data
+    """
+    export_service = get_export_service_instance()
+    if export_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Export service not available"
+        )
+
+    try:
+        export_data = {
+            "session_id": export_request.session_id,
+            "export_date": datetime.now().isoformat(),
+            "message_count": len(export_request.conversation_history),
+            "conversation": export_request.conversation_history
+        }
+
+        json_data = export_service.export_to_json(export_data)
+        filename = f"conversation_{export_request.session_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+        return StreamingResponse(
+            io.BytesIO(json_data),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Length": str(len(json_data))
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"JSON export error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Export failed: {str(e)}"
+        )
+
+
+@app.post("/api/v1/export/session/pdf", tags=["Export"])
+@limiter.limit("5/minute")
+async def export_session_pdf(request: Request, report_request: SessionReportRequest):
+    """
+    Generate PDF report for counseling session
+
+    Returns downloadable PDF with session summary, emotion analysis, and conversation highlights
+    """
+    export_service = get_export_service_instance()
+    if export_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Export service not available"
+        )
+
+    try:
+        session_data = {
+            "session_id": report_request.session_id,
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "time": datetime.now().strftime("%H:%M"),
+            "counselor_name": report_request.counselor_name,
+            "counselor_type": report_request.counselor_type
+        }
+
+        pdf_data = export_service.generate_session_report_pdf(
+            session_data=session_data,
+            conversation_history=report_request.conversation_history,
+            emotion_analysis=report_request.emotion_analysis
+        )
+
+        filename = f"session_report_{report_request.session_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+
+        return StreamingResponse(
+            io.BytesIO(pdf_data),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Length": str(len(pdf_data))
+            }
+        )
+
+    except ImportError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="PDF generation requires reportlab. Install with: pip install reportlab"
+        )
+    except Exception as e:
+        logger.error(f"PDF export error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"PDF generation failed: {str(e)}"
+        )
+
+
+@app.post("/api/v1/export/assessment/pdf", tags=["Export"])
+@limiter.limit("5/minute")
+async def export_assessment_pdf(request: Request, assessment_request: ExportAssessmentRequest):
+    """
+    Generate PDF report for psychological assessment
+
+    Returns downloadable PDF with assessment results, interpretation, and recommendations
+    """
+    export_service = get_export_service_instance()
+    if export_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Export service not available"
+        )
+
+    try:
+        pdf_data = export_service.generate_assessment_report_pdf(
+            user_id=assessment_request.user_id or "anonymous",
+            assessment_type=assessment_request.assessment_type,
+            score=assessment_request.score,
+            severity=assessment_request.severity,
+            responses=assessment_request.responses,
+            recommendations=assessment_request.recommendations
+        )
+
+        filename = f"{assessment_request.assessment_type}_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+
+        return StreamingResponse(
+            io.BytesIO(pdf_data),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Length": str(len(pdf_data))
+            }
+        )
+
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="PDF generation requires reportlab"
+        )
+    except Exception as e:
+        logger.error(f"Assessment PDF export error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"PDF generation failed: {str(e)}"
+        )
+
+
+@app.get("/api/v1/export/stats", tags=["Export"])
+async def get_export_stats():
+    """Get export service statistics"""
+    export_service = get_export_service_instance()
+    if export_service is None:
+        return {
+            "status": "unavailable",
+            "message": "Export service not available"
+        }
+
+    return {
+        "status": "available",
+        "stats": export_service.get_stats()
+    }
+
+
+# ============================================================================
+# Monitoring and Metrics Endpoints
+# ============================================================================
+
+@app.get("/api/v1/monitoring/system", tags=["Monitoring"])
+async def get_system_metrics():
+    """
+    Get comprehensive system metrics
+
+    Returns CPU, memory, GPU usage, and active sessions
+    """
+    try:
+        import psutil
+
+        # System metrics
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        memory = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+
+        metrics = {
+            "cpu": {
+                "percent": cpu_percent,
+                "count": psutil.cpu_count()
+            },
+            "memory": {
+                "total_gb": round(memory.total / (1024**3), 2),
+                "used_gb": round(memory.used / (1024**3), 2),
+                "available_gb": round(memory.available / (1024**3), 2),
+                "percent": memory.percent
+            },
+            "disk": {
+                "total_gb": round(disk.total / (1024**3), 2),
+                "used_gb": round(disk.used / (1024**3), 2),
+                "free_gb": round(disk.free / (1024**3), 2),
+                "percent": disk.percent
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+
+        # GPU metrics if available
+        try:
+            import torch
+            if torch.cuda.is_available():
+                metrics["gpu"] = {
+                    "available": True,
+                    "device_name": torch.cuda.get_device_name(0),
+                    "memory_allocated_gb": round(torch.cuda.memory_allocated() / (1024**3), 2),
+                    "memory_reserved_gb": round(torch.cuda.memory_reserved() / (1024**3), 2)
+                }
+            else:
+                metrics["gpu"] = {"available": False}
+        except Exception:
+            metrics["gpu"] = {"available": False}
+
+        return metrics
+
+    except Exception as e:
+        logger.error(f"System metrics error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve system metrics: {str(e)}"
+        )
+
+
+@app.get("/api/v1/monitoring/api-stats", tags=["Monitoring"])
+async def get_api_statistics():
+    """
+    Get API usage statistics
+
+    Returns request counts, response times, error rates
+    """
+    try:
+        stats = {
+            "total_requests": 0,
+            "success_count": 0,
+            "error_count": 0,
+            "endpoints": {},
+            "voice_stats": None,
+            "export_stats": None,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        # Voice service stats
+        voice_service = get_voice_service_instance()
+        if voice_service:
+            stats["voice_stats"] = voice_service.get_stats()
+
+        # Export service stats
+        export_service = get_export_service_instance()
+        if export_service:
+            stats["export_stats"] = export_service.get_stats()
+
+        # System stats if available
+        if mental_health_system:
+            stats["system_stats"] = mental_health_system.stats
+
+        return stats
+
+    except Exception as e:
+        logger.error(f"API stats error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve API statistics: {str(e)}"
+        )
+
+
+@app.get("/api/v1/monitoring/performance", tags=["Monitoring"])
+async def get_performance_metrics():
+    """
+    Get performance metrics including response times and throughput
+    """
+    if not mental_health_system:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="System not initialized"
+        )
+
+    try:
+        stats = mental_health_system.stats
+
+        performance = {
+            "total_conversations": stats.get("total_conversations", 0),
+            "crisis_detections": stats.get("crisis_detections", 0),
+            "average_response_time": stats.get("avg_response_time", 0),
+            "uptime_seconds": (datetime.now() - stats.get("uptime_start", datetime.now())).total_seconds(),
+            "components_status": mental_health_system.validate_system(),
+            "timestamp": datetime.now().isoformat()
+        }
+
+        return performance
+
+    except Exception as e:
+        logger.error(f"Performance metrics error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve performance metrics: {str(e)}"
+        )
+
+
+@app.get("/api/v1/monitoring/alerts", tags=["Monitoring"])
+async def get_active_alerts():
+    """
+    Get current active alerts and warnings
+
+    Checks for crisis detections, high error rates, system issues
+    """
+    alerts = []
+
+    try:
+        # Check system health
+        if mental_health_system:
+            validation = mental_health_system.validate_system()
+
+            # Check for component failures
+            for component, status in validation.items():
+                if not status:
+                    alerts.append({
+                        "severity": "critical",
+                        "type": "component_failure",
+                        "message": f"Component '{component}' is not functioning",
+                        "timestamp": datetime.now().isoformat()
+                    })
+
+            # Check for recent crisis detections
+            stats = mental_health_system.stats
+            if stats.get("crisis_detections", 0) > 0:
+                alerts.append({
+                    "severity": "warning",
+                    "type": "crisis_activity",
+                    "message": f"{stats['crisis_detections']} crisis situations detected",
+                    "timestamp": datetime.now().isoformat()
+                })
+
+        # Check system resources
+        try:
+            import psutil
+            memory = psutil.virtual_memory()
+            if memory.percent > 90:
+                alerts.append({
+                    "severity": "critical",
+                    "type": "high_memory",
+                    "message": f"Memory usage at {memory.percent}%",
+                    "timestamp": datetime.now().isoformat()
+                })
+            elif memory.percent > 80:
+                alerts.append({
+                    "severity": "warning",
+                    "type": "high_memory",
+                    "message": f"Memory usage at {memory.percent}%",
+                    "timestamp": datetime.now().isoformat()
+                })
+
+            cpu = psutil.cpu_percent(interval=0.1)
+            if cpu > 90:
+                alerts.append({
+                    "severity": "warning",
+                    "type": "high_cpu",
+                    "message": f"CPU usage at {cpu}%",
+                    "timestamp": datetime.now().isoformat()
+                })
+        except Exception:
+            pass
+
+        return {
+            "active_alerts": alerts,
+            "alert_count": len(alerts),
+            "critical_count": sum(1 for a in alerts if a["severity"] == "critical"),
+            "warning_count": sum(1 for a in alerts if a["severity"] == "warning"),
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Alerts check error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to check alerts: {str(e)}"
         )
 
 
