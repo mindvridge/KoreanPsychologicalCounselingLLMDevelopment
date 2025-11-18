@@ -60,12 +60,16 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS Configuration
+# Security: Only allow specific origins in production
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:7860,http://localhost:8000")
+allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "*").split(","),
+    allow_origins=allowed_origins,  # Specific origins only (not "*")
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE"],  # Specific methods only
+    allow_headers=["Content-Type", "X-API-Key"],  # Specific headers only
 )
 
 # Static files (Frontend)
@@ -375,6 +379,17 @@ async def startup_event():
     logger.info("="*70)
 
     try:
+        # Initialize database (create tables if they don't exist)
+        logger.info("Initializing database...")
+        try:
+            from src.database import Base, get_engine
+            engine = get_engine()
+            Base.metadata.create_all(engine)
+            logger.info("✓ Database tables initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}")
+            logger.warning("Database features may not work correctly")
+
         # Initialize integrated system
         config_path = os.getenv("CONFIG_PATH", "configs/config.yaml")
         mental_health_system = IntegratedMentalHealthSystem(config_path=config_path)
