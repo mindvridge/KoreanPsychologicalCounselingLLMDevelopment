@@ -11,7 +11,7 @@ from typing import Optional, List, Dict, Any
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, Float, ForeignKey, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, Session
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import StaticPool, QueuePool, NullPool
 import hashlib
 import uuid
 
@@ -355,7 +355,23 @@ class DatabaseManager:
                 poolclass=StaticPool
             )
         else:
-            self.engine = create_engine(database_url, echo=echo)
+            # PostgreSQL/MySQL 등 프로덕션 데이터베이스용 연결 풀링 설정
+            pool_size = int(os.getenv("DB_POOL_SIZE", "10"))  # 기본 연결 풀 크기
+            max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "20"))  # 최대 오버플로우 연결
+            pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "30"))  # 연결 대기 타임아웃 (초)
+            pool_recycle = int(os.getenv("DB_POOL_RECYCLE", "3600"))  # 연결 재활용 시간 (초)
+            pool_pre_ping = os.getenv("DB_POOL_PRE_PING", "true").lower() == "true"  # 연결 확인
+
+            self.engine = create_engine(
+                database_url,
+                echo=echo,
+                poolclass=QueuePool,
+                pool_size=pool_size,
+                max_overflow=max_overflow,
+                pool_timeout=pool_timeout,
+                pool_recycle=pool_recycle,
+                pool_pre_ping=pool_pre_ping,  # 연결 전 상태 확인 (끊어진 연결 방지)
+            )
 
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
 

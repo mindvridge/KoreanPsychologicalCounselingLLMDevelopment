@@ -179,13 +179,11 @@ class IntegratedMentalHealthSystem:
             rag_config = self.config.get("rag", {})
             self.rag_system = MentalHealthRAG(
                 knowledge_base_dir=rag_config.get("knowledge_base_dir", "./knowledge_base"),
-                chunk_size=rag_config.get("chunk_size", 500),
-                chunk_overlap=rag_config.get("chunk_overlap", 50),
-                embedding_model=rag_config.get("embedding_model", "jhgan/ko-sroberta-multitask")
+                persist_directory=rag_config.get("persist_directory", "./mental_health_vectors")
             )
             logger.info("   Indexing knowledge base...")
-            self.rag_system.index_documents()
-            logger.info(f"✓ RAG system initialized with {len(self.rag_system.doc_processor.documents)} documents")
+            self.rag_system.index_knowledge_base()
+            logger.info(f"✓ RAG system initialized with {len(self.rag_system.vector_store.documents)} documents")
         except Exception as e:
             logger.error(f"✗ RAG initialization failed: {e}")
             self.initialization_errors.append(("rag", str(e)))
@@ -312,9 +310,9 @@ class IntegratedMentalHealthSystem:
             logger.info("✓ Assessment manager validation: PASS")
 
         # Validate RAG system
-        if self.rag_system and self.rag_system.is_indexed:
+        if self.rag_system and len(self.rag_system.vector_store.documents) > 0:
             try:
-                test_results = self.rag_system.search("우울증", k=1)
+                test_results = self.rag_system.retrieve("우울증", k=1)
                 results["rag_system"] = len(test_results) > 0
                 logger.info(f"✓ RAG system validation: {'PASS' if results['rag_system'] else 'FAIL'}")
             except Exception as e:
@@ -387,9 +385,10 @@ class IntegratedMentalHealthSystem:
             rag_context = ""
             if self.rag_system and not crisis_detected:
                 try:
-                    rag_context = self.rag_system.get_augmented_context(
-                        user_message,
-                        max_results=self.config.get("rag", {}).get("max_results", 3)
+                    rag_context = self.rag_system.augment(
+                        query=user_message,
+                        conversation_history=conversation_history,
+                        k=self.config.get("rag", {}).get("max_results", 3)
                     )
                 except Exception as e:
                     logger.warning(f"RAG retrieval failed: {e}")
@@ -567,7 +566,7 @@ class IntegratedMentalHealthSystem:
                 "crisis_detector": self.crisis_detector is not None,
                 "emotion_analyzer": self.emotion_analyzer is not None,
                 "assessment_manager": self.assessment_manager is not None,
-                "rag_system": self.rag_system is not None and self.rag_system.is_indexed,
+                "rag_system": self.rag_system is not None and len(self.rag_system.vector_store.documents) > 0,
                 "monitoring": self.monitor is not None,
                 "logging": self.logger is not None
             }

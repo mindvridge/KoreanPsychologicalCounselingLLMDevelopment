@@ -953,7 +953,7 @@ async def system_info():
         "capabilities": {
             "crisis_detection": mental_health_system.crisis_detector is not None,
             "emotion_analysis": mental_health_system.emotion_analyzer is not None,
-            "rag_system": mental_health_system.rag_system is not None and mental_health_system.rag_system.is_indexed,
+            "rag_system": mental_health_system.rag_system is not None and len(mental_health_system.rag_system.vector_store.documents) > 0,
             "assessments": mental_health_system.assessment_manager is not None,
             "monitoring": mental_health_system.monitor is not None,
             "logging": mental_health_system.logger is not None

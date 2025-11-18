@@ -64,3 +64,7 @@ scipy>=1.11.0  # Signal processing
 # PDF Generation for Reports
 reportlab>=4.0.0  # PDF generation
 weasyprint>=60.0  # HTML to PDF conversion
+
+# Caching and Performance
+redis>=5.0.0  # Redis caching for performance optimization
+hiredis>=2.2.0  # High-performance Redis parser
