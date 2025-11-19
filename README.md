@@ -65,13 +65,40 @@
 - **CUDA**: 12.1 이상
 - **cuDNN**: 8.x
 
-## 📦 설치 방법
+## 🚀 원클릭 실행 (가장 쉬운 방법!)
+
+### Windows
+1. **`run_server.bat`** 파일을 더블클릭
+2. 완료! 브라우저에서 http://localhost:8000 접속
+
+### Linux / Mac
+```bash
+./run_server.sh
+```
+
+또는
+
+```bash
+python3 run_server.py
+```
+
+**그게 전부입니다!** 스크립트가 자동으로:
+- ✅ Python 버전 확인
+- ✅ 가상 환경 생성
+- ✅ 의존성 설치
+- ✅ 데이터베이스 초기화
+- ✅ 암호화 키 생성
+- ✅ 서버 시작
+
+---
+
+## 📦 수동 설치 (고급 사용자용)
 
 ### 1. 저장소 클론
 
 ```bash
-git clone https://github.com/yourusername/korean-mental-health-llm.git
-cd korean-mental-health-llm
+git clone https://github.com/mindvridge/KoreanPsychologicalCounselingLLMDevelopment.git
+cd KoreanPsychologicalCounselingLLMDevelopment
 ```
 
 ### 2. 가상환경 생성 (권장)
@@ -93,10 +120,10 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# .env 파일을 편집하여 설정 조정
+python scripts/generate_encryption_key.py --save  # 암호화 키 생성
 ```
 
-### 5. GPU 확인
+### 5. GPU 확인 (선택적)
 
 ```bash
 python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}')"
