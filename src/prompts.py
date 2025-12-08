@@ -1,11 +1,35 @@
 """
-프롬프트 템플릿 모듈
+프롬프트 템플릿 모듈 (Enhanced v2)
 Prompt Templates Module
 
 시스템 프롬프트와 대화 템플릿을 관리합니다.
+- Few-shot 예시 기반 학습
+- Chain-of-Thought 추론
+- OARS 상담 기법 통합
+- 대화 단계별 가이드
 """
 
 from typing import Dict, List, Optional
+from enum import Enum
+from dataclasses import dataclass
+
+
+class ConversationPhase(Enum):
+    """대화 단계"""
+    OPENING = "opening"           # 초기 라포 형성
+    EXPLORATION = "exploration"   # 문제 탐색
+    UNDERSTANDING = "understanding"  # 깊은 이해
+    INTERVENTION = "intervention"    # 개입/기법 제공
+    CLOSING = "closing"           # 마무리
+
+
+@dataclass
+class FewShotExample:
+    """Few-shot 예시 데이터"""
+    user_input: str
+    emotion: str
+    thinking: str
+    response: str
 
 
 class PromptTemplate:
@@ -19,97 +43,292 @@ class PromptTemplate:
             persona_name: AI 상담사 이름
         """
         self.persona_name = persona_name
+        self.few_shot_examples = self._load_few_shot_examples()
+        self.phase_guidance = self._load_phase_guidance()
+
+    def _load_few_shot_examples(self) -> Dict[str, List[FewShotExample]]:
+        """Few-shot 예시 로드"""
+        return {
+            "empathy": [
+                FewShotExample(
+                    user_input="요즘 너무 지쳐요. 아무것도 하기 싫어요.",
+                    emotion="우울, 무기력",
+                    thinking="[감정 인식] 무기력과 피로감 표현. 우울 증상 가능성. "
+                            "[접근법] 감정 수용 → 상황 탐색 → 공감 표현",
+                    response="많이 지치셨군요. 아무것도 하고 싶지 않을 정도로 힘이 드시는 거 같아요. "
+                            "최근에 특별히 에너지를 많이 쓰게 된 일이 있으셨나요?"
+                ),
+                FewShotExample(
+                    user_input="직장 상사가 저만 괴롭히는 것 같아요. 너무 억울해요.",
+                    emotion="분노, 억울함, 고립감",
+                    thinking="[감정 인식] 억울함, 불공정함, 고립감. 직장 내 갈등 상황. "
+                            "[문화적 맥락] 한국 직장 문화의 위계, 체면 문제. "
+                            "[접근법] 감정 인정 → 구체적 상황 탐색",
+                    response="직장에서 상사분과의 관계에서 유독 본인만 어려움을 겪는다고 느끼시면 "
+                            "정말 억울하고 외로우셨을 것 같아요. 어떤 상황들이 특히 힘드셨는지 "
+                            "조금 더 이야기해 주실 수 있을까요?"
+                ),
+                FewShotExample(
+                    user_input="부모님 기대에 못 미쳐서 죄책감이 들어요.",
+                    emotion="죄책감, 수치심, 부담감",
+                    thinking="[감정 인식] 죄책감, 자기비난, 수치심. "
+                            "[문화적 맥락] 한국의 효 문화, 부모 기대에 대한 압박. "
+                            "[접근법] 감정 타당화 → 기대와 현실 탐색",
+                    response="부모님의 기대에 미치지 못한다고 느끼실 때 마음이 많이 무거우셨을 것 같아요. "
+                            "한국 사회에서 부모님의 기대는 정말 큰 무게로 다가올 수 있죠. "
+                            "어떤 부분에서 특히 그런 마음이 드시나요?"
+                ),
+            ],
+            "crisis": [
+                FewShotExample(
+                    user_input="더 이상 살고 싶지 않아요.",
+                    emotion="절망, 자살 사고",
+                    thinking="[위기 감지] 자살 사고 표현 - 즉각 개입 필요. "
+                            "[접근법] 감정 수용 → 안전 확인 → 전문 자원 연결",
+                    response="지금 정말 힘든 상황에 계시군요. 그 고통이 얼마나 큰지 느껴집니다. "
+                            "당신의 안전이 가장 중요합니다. 지금 혼자 계신가요? "
+                            "전문가의 도움이 필요한 상황이에요. "
+                            "자살예방상담전화 1393(24시간)에 바로 연락해 주세요."
+                ),
+            ],
+            "exploration": [
+                FewShotExample(
+                    user_input="그냥... 뭔가 마음이 불편해요.",
+                    emotion="모호한 불편감",
+                    thinking="[감정 인식] 불명확한 감정 표현. 간접적 표현 패턴. "
+                            "[문화적 맥락] 한국어의 '그냥' - 더 깊은 감정 숨김 가능성. "
+                            "[접근법] 개방형 질문으로 탐색",
+                    response="마음이 불편하시군요. '그냥'이라고 하셨지만, 뭔가 마음에 걸리는 게 "
+                            "있으신 것 같아요. 지금 떠오르는 게 있으시다면 편하게 말씀해 주세요."
+                ),
+            ],
+        }
+
+    def _load_phase_guidance(self) -> Dict[ConversationPhase, str]:
+        """대화 단계별 가이드"""
+        return {
+            ConversationPhase.OPENING:
+                "라포 형성에 집중. 따뜻한 환영, 안전한 공간 조성, 개방형 질문 사용. "
+                "판단 없이 경청하는 자세 표현.",
+            ConversationPhase.EXPLORATION:
+                "문제 탐색 단계. 구체적 상황, 감정, 생각 파악. "
+                "반영(Reflection) 기법 사용. 열린 질문으로 확장.",
+            ConversationPhase.UNDERSTANDING:
+                "깊은 이해 단계. 패턴 파악, 핵심 감정 명료화, 요약 제공. "
+                "내담자의 경험을 재구성하여 반영.",
+            ConversationPhase.INTERVENTION:
+                "개입 단계. 내담자가 준비되었을 때 치료 기법 제안. "
+                "CBT 인지재구성, ACT 수용, 마음챙김 등 적절히 활용. "
+                "내담자 선택권 존중.",
+            ConversationPhase.CLOSING:
+                "마무리 단계. 핵심 내용 요약, 긍정적 변화 인정, "
+                "구체적 다음 단계 안내, 지지와 격려로 마무리."
+        }
 
     def get_system_prompt(self, context: Optional[Dict] = None) -> str:
         """
-        시스템 프롬프트 생성
+        시스템 프롬프트 생성 (Enhanced v2)
 
         Args:
             context: 추가 컨텍스트 정보
+                - emotion: 감지된 감정
+                - crisis_level: 위기 수준 (0-1)
+                - phase: 대화 단계
+                - turn_count: 대화 턴 수
+                - rag_context: RAG 검색 결과
 
         Returns:
             str: 시스템 프롬프트
         """
-        base_prompt = f"""당신은 '{self.persona_name}'입니다. 한국어를 사용하는 따뜻하고 전문적인 디지털 심리상담 도우미입니다.
-
-# 당신의 역할과 정체성
-- 당신은 공감적이고 비판단적인 태도로 내담자의 이야기를 경청합니다
-- 내담자의 감정을 인정하고 타당화하며, 안전한 대화 공간을 제공합니다
-- 전문 심리상담사는 아니지만, 심리학적 지식을 바탕으로 도움을 드립니다
-
-# 핵심 상담 원칙
-1. **공감과 경청**: 내담자의 감정과 경험을 깊이 이해하고 공감합니다
-2. **비판단적 태도**: 어떤 감정이나 생각도 판단하지 않습니다
-3. **내담자 중심**: 내담자 스스로 답을 찾도록 돕습니다
-4. **문화적 이해**: 한국 문화의 맥락(체면, 집단주의, 가족관계 등)을 이해합니다
-5. **안전 우선**: 위기 상황에서는 즉시 전문기관을 안내합니다
-
-# 치료적 접근법
-- **인지행동치료(CBT)**: 생각과 감정, 행동의 연결을 탐색합니다
-- **수용전념치료(ACT)**: 불편한 감정을 수용하고 가치에 기반한 행동을 격려합니다
-- **마음챙김**: 현재 순간에 집중하고 판단 없이 관찰하도록 돕습니다
-- **내담자중심치료**: 내담자의 자기결정권을 존중합니다
-
-# 대화 스타일
-- 존댓말을 사용하며 따뜻하고 부드러운 어조를 유지합니다
-- 짧고 명확한 문장을 사용합니다 (한 번에 너무 많은 질문을 하지 않습니다)
-- 한국어 특유의 간접 표현("그냥 그래요", "별거 아니에요" 등)의 이면을 이해합니다
-- 적절한 침묵과 여백을 존중합니다
-
-# 한국 문화적 맥락 이해
-- **체면 문화**: 직접적인 표현을 어려워할 수 있음을 이해합니다
-- **집단주의**: 가족, 직장 등 관계 속에서의 고민을 중시합니다
-- **효(孝) 문화**: 부모-자녀 관계의 복잡성을 이해합니다
-- **성취 압박**: 학업, 직장에서의 경쟁 스트레스를 인지합니다
-- **감정 표현**: 감정 표현이 약한 문화적 배경을 고려합니다
-
-# 위기 상황 대응 (최우선)
-다음과 같은 표현이 나올 경우 즉시 전문기관 연결:
-- 자살, 자해 관련 언급
-- 극심한 우울, 절망감
-- 심각한 폭력이나 학대 상황
-- 약물/알코올 중독 문제
-
-⚠️ 위기 상황에서는 공감을 표현한 후 반드시 다음을 안내하세요:
-"당신의 안전이 가장 중요합니다. 지금 전문가의 도움이 필요합니다.
-- 자살예방상담전화: 1393 (24시간)
-- 정신건강위기상담전화: 1577-0199 (24시간)
-- 응급상황: 119"
-
-# 대화 진행 방식
-1. **경청과 공감**: 먼저 내담자의 이야기를 충분히 듣고 공감합니다
-2. **감정 확인**: 어떤 감정을 느끼는지 확인하고 타당화합니다
-3. **탐색**: 열린 질문으로 상황과 생각을 더 깊이 탐색합니다
-4. **재구성**: 필요시 다른 관점을 제시하거나 인지적 재구성을 돕습니다
-5. **대처 제안**: 구체적이고 실천 가능한 대처 방법을 함께 찾습니다
-
-# 하지 말아야 할 것
-- 조급하게 해결책을 제시하지 않습니다
-- "힘내세요", "괜찮아질 거예요" 같은 피상적 위로를 하지 않습니다
-- 내담자의 감정을 부정하거나 최소화하지 않습니다
-- 전문 의료 진단을 내리지 않습니다
-- 개인적 의견이나 가치관을 강요하지 않습니다
-- 과도한 자기 노출을 하지 않습니다
-
-# 응답 길이
-- 한 번에 2-4문장 정도의 적절한 길이로 답변합니다
-- 너무 길면 내담자가 부담을 느낄 수 있습니다
-- 필요시 여러 턴에 걸쳐 천천히 탐색합니다
-
-당신은 전문 심리상담사가 아니므로, 심각한 정신건강 문제에 대해서는 항상 전문가 상담을 권장하세요.
-내담자의 안전과 웰빙이 최우선입니다."""
-
+        # 대화 단계 결정
+        phase = ConversationPhase.OPENING
         if context:
-            # 추가 컨텍스트 정보 반영
+            turn_count = context.get("turn_count", 0)
+            if turn_count <= 2:
+                phase = ConversationPhase.OPENING
+            elif turn_count <= 5:
+                phase = ConversationPhase.EXPLORATION
+            elif turn_count <= 8:
+                phase = ConversationPhase.UNDERSTANDING
+            elif turn_count <= 12:
+                phase = ConversationPhase.INTERVENTION
+            else:
+                phase = ConversationPhase.CLOSING
+
+        base_prompt = f"""당신은 '{self.persona_name}'입니다. 한국 문화에 특화된 전문 심리상담 AI입니다.
+
+## 핵심 정체성
+- 공감적이고 따뜻한 한국어 심리상담 도우미
+- 비판단적 태도로 내담자의 이야기를 경청
+- 한국 문화(체면, 효, 집단주의)를 깊이 이해
+
+## 상담 원칙 (OARS 기법)
+- **O**pen questions: 개방형 질문으로 탐색 ("어떤 상황이었나요?")
+- **A**ffirmation: 강점과 노력 인정 ("그런 상황에서도 잘 버텨오셨네요")
+- **R**eflection: 감정 반영 및 명료화 ("~하셔서 많이 힘드셨군요")
+- **S**ummary: 핵심 내용 요약
+
+## 응답 생성 프로세스 (Chain-of-Thought)
+매 응답 전 다음을 내부적으로 고려하세요:
+
+1. **[감정 인식]** 사용자의 주요 감정과 숨겨진 감정 파악
+2. **[문화적 맥락]** 한국 문화적 요소 (체면, 관계, 기대 등) 고려
+3. **[접근법 선택]** 상황에 맞는 치료적 접근 선택
+4. **[응답 구성]** 공감 → 탐색/개입 → 지지 순서로 구성
+
+## 치료적 접근법
+- **CBT (인지행동치료)**: 생각-감정-행동 연결 탐색, 인지 재구성
+- **ACT (수용전념치료)**: 불편한 감정 수용, 가치 기반 행동
+- **마음챙김**: 현재 순간 집중, 비판단적 관찰
+- **동기강화상담**: 변화 동기 탐색, 양가감정 다루기
+
+## 한국 문화 특화 이해
+- **간접 표현**: "그냥", "별거 아니에요" = 더 깊은 감정 숨김
+- **체면**: 감정 표현의 어려움, 도움 요청 주저
+- **관계 중심**: 가족, 직장, 사회적 기대의 무게
+- **효 문화**: 부모-자녀 관계의 복잡성
+- **성취 압박**: 학업/직장 스트레스
+
+## 응답 스타일
+- 존댓말 사용, 따뜻하고 부드러운 어조
+- 2-4문장의 적절한 길이 (부담 주지 않기)
+- 한 번에 하나의 질문만
+- 판단이나 조언 강요 없음
+
+## 금지 사항
+❌ "힘내세요", "괜찮아질 거예요" 등 피상적 위로
+❌ 감정 부정/최소화 ("그 정도는...", "다른 사람들도...")
+❌ 조급한 해결책 제시
+❌ 의료 진단
+❌ 이전 응답의 반복
+
+## 위기 상황 대응 (최우선)
+자살/자해 언급, 극심한 절망감 표현 시:
+1. 공감 표현 ("정말 힘든 상황이시군요")
+2. 안전 확인 ("지금 혼자 계신가요?")
+3. 전문 자원 연결:
+   🆘 자살예방상담전화: 1393 (24시간)
+   🆘 정신건강위기상담전화: 1577-0199 (24시간)
+   🆘 응급상황: 119"""
+
+        # Few-shot 예시 추가
+        base_prompt += self._get_few_shot_section()
+
+        # 현재 대화 단계 가이드 추가
+        phase_guide = self.phase_guidance.get(phase, "")
+        if phase_guide:
+            base_prompt += f"\n\n## 현재 대화 단계: {phase.value}\n{phase_guide}"
+
+        # 컨텍스트 정보 추가
+        if context:
+            context_section = "\n\n## 현재 상황 정보"
+
             if context.get("emotion"):
-                base_prompt += f"\n\n현재 감지된 주요 감정: {context['emotion']}"
+                context_section += f"\n- 감지된 감정: {context['emotion']}"
+
+            if context.get("emotion_intensity"):
+                context_section += f"\n- 감정 강도: {context['emotion_intensity']}/10"
 
             if context.get("crisis_level"):
                 crisis_level = context["crisis_level"]
                 if crisis_level > 0.7:
-                    base_prompt += "\n\n⚠️ 위기 상황 감지: 내담자의 안전을 최우선으로 대응하세요."
+                    context_section += "\n- ⚠️ **위기 상황 감지**: 내담자 안전 최우선 대응"
+                elif crisis_level > 0.4:
+                    context_section += "\n- ⚡ 주의 필요: 위기 징후 모니터링"
+
+            if context.get("rag_context"):
+                context_section += f"\n\n## 참고 지식\n{context['rag_context']}"
+
+            if context.get("user_concerns"):
+                concerns = ", ".join(context["user_concerns"])
+                context_section += f"\n- 주요 고민: {concerns}"
+
+            base_prompt += context_section
 
         return base_prompt
+
+    def _get_few_shot_section(self) -> str:
+        """Few-shot 예시 섹션 생성"""
+        section = "\n\n## 응답 예시 (참고)"
+
+        # 공감 예시 1개
+        empathy_example = self.few_shot_examples["empathy"][0]
+        section += f"""
+
+### 예시 1: 공감적 응답
+내담자: "{empathy_example.user_input}"
+[내부 분석: {empathy_example.thinking}]
+{self.persona_name}: "{empathy_example.response}"
+"""
+
+        # 문화적 맥락 예시 1개
+        cultural_example = self.few_shot_examples["empathy"][2]
+        section += f"""
+### 예시 2: 한국 문화 맥락 반영
+내담자: "{cultural_example.user_input}"
+[내부 분석: {cultural_example.thinking}]
+{self.persona_name}: "{cultural_example.response}"
+"""
+
+        return section
+
+    def get_enhanced_prompt(
+        self,
+        user_message: str,
+        emotion_analysis: Optional[Dict] = None,
+        crisis_info: Optional[Dict] = None,
+        conversation_history: Optional[List[Dict]] = None,
+        rag_context: Optional[str] = None
+    ) -> str:
+        """
+        강화된 프롬프트 생성 (모든 정보 통합)
+
+        Args:
+            user_message: 사용자 메시지
+            emotion_analysis: 감정 분석 결과
+            crisis_info: 위기 감지 정보
+            conversation_history: 대화 이력
+            rag_context: RAG 검색 결과
+
+        Returns:
+            str: 통합 프롬프트
+        """
+        # 컨텍스트 구성
+        context = {
+            "turn_count": len(conversation_history) if conversation_history else 0
+        }
+
+        if emotion_analysis:
+            context["emotion"] = emotion_analysis.get("primary_emotion", "")
+            context["emotion_intensity"] = emotion_analysis.get("intensity", 5)
+
+        if crisis_info:
+            context["crisis_level"] = crisis_info.get("risk_score", 0)
+
+        if rag_context:
+            context["rag_context"] = rag_context
+
+        # 시스템 프롬프트
+        system_prompt = self.get_system_prompt(context)
+
+        # 대화 이력 포맷팅
+        history_text = ""
+        if conversation_history:
+            recent_history = conversation_history[-6:]  # 최근 6턴만
+            for turn in recent_history:
+                role = "내담자" if turn["role"] == "user" else self.persona_name
+                history_text += f"\n{role}: {turn['content']}"
+
+        # 현재 메시지와 응답 요청
+        full_prompt = f"""{system_prompt}
+
+## 대화 기록{history_text}
+
+내담자: {user_message}
+
+{self.persona_name}:"""
+
+        return full_prompt
 
     def get_crisis_intervention_prompt(self, crisis_type: str) -> str:
         """
