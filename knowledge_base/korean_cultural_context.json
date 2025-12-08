@@ -1,0 +1,143 @@
+{
+  "cultural_concepts": [
+    {
+      "id": "jeong_001",
+      "concept": "정 (情)",
+      "romanization": "Jeong",
+      "description": "한국 특유의 정서적 유대감과 애착, 깊은 인간관계의 정서",
+      "counseling_implications": [
+        "관계 중심의 상담 접근 중요",
+        "상담자-내담자 간 따뜻한 관계 형성 필수",
+        "정이 깊으면 헤어짐이 더 힘들 수 있음",
+        "정 때문에 해로운 관계를 유지하는 경우 탐색"
+      ],
+      "helpful_phrases": [
+        "오랜 관계에서 쌓인 정이 있으시군요.",
+        "정 때문에 더 힘드실 수 있어요.",
+        "관계를 소중히 여기시는 마음이 느껴져요."
+      ]
+    },
+    {
+      "id": "chemyeon_001",
+      "concept": "체면 (體面)",
+      "romanization": "Chemyeon",
+      "description": "사회적 이미지와 명예를 중시하는 문화적 가치",
+      "counseling_implications": [
+        "체면 때문에 도움 요청이 어려울 수 있음",
+        "가족이나 집단의 체면 손상 우려",
+        "실패나 문제를 숨기려는 경향",
+        "상담 자체에 대한 부끄러움"
+      ],
+      "helpful_phrases": [
+        "상담받는 것이 부끄러운 일이 아니에요.",
+        "도움을 요청하는 것은 용기 있는 행동이에요.",
+        "다른 사람들 눈이 신경 쓰이시는군요."
+      ]
+    },
+    {
+      "id": "hyo_001",
+      "concept": "효 (孝)",
+      "romanization": "Hyo",
+      "description": "부모에 대한 공경과 효도를 강조하는 전통적 가치",
+      "counseling_implications": [
+        "부모와의 갈등에서 죄책감을 느낄 수 있음",
+        "부모의 기대와 자신의 욕구 사이 갈등",
+        "부모 돌봄의 부담과 스트레스",
+        "세대 간 가치관 차이로 인한 어려움"
+      ],
+      "helpful_phrases": [
+        "부모님께 효도하고 싶은 마음과 자신의 삶을 살고 싶은 마음, 둘 다 자연스러운 거예요.",
+        "부모님의 기대가 부담스러우시군요.",
+        "자신을 돌보는 것도 중요해요."
+      ]
+    },
+    {
+      "id": "nunchi_001",
+      "concept": "눈치",
+      "romanization": "Nunchi",
+      "description": "상황과 타인의 감정을 살피는 사회적 감수성",
+      "counseling_implications": [
+        "타인의 기분에 지나치게 민감할 수 있음",
+        "자신의 욕구보다 타인의 기대에 맞추려 함",
+        "직접적 표현보다 간접적 소통 선호",
+        "거절하기 어려움"
+      ],
+      "helpful_phrases": [
+        "다른 사람 눈치를 많이 보시는군요.",
+        "자신의 감정과 필요도 중요해요.",
+        "모든 사람을 만족시킬 수는 없어요."
+      ]
+    },
+    {
+      "id": "han_001",
+      "concept": "한 (恨)",
+      "romanization": "Han",
+      "description": "오랜 시간 억눌린 슬픔, 원망, 서러움의 복합 정서",
+      "counseling_implications": [
+        "오래 쌓인 감정의 표현과 해소 필요",
+        "세대를 넘어 전달되는 트라우마",
+        "억압된 감정의 신체화 가능성",
+        "충분한 공감과 경청의 중요성"
+      ],
+      "helpful_phrases": [
+        "오랜 시간 마음에 담아두셨군요.",
+        "그 서러움을 충분히 느끼셔도 돼요.",
+        "이야기하시면서 조금이라도 풀리시면 좋겠어요."
+      ]
+    },
+    {
+      "id": "ppalli_001",
+      "concept": "빨리빨리 문화",
+      "romanization": "Ppalli-ppalli",
+      "description": "빠른 속도와 효율을 추구하는 문화적 특성",
+      "counseling_implications": [
+        "빠른 해결책을 원할 수 있음",
+        "상담 과정의 시간이 필요함을 설명",
+        "조급함과 인내의 균형",
+        "자신에게 시간을 주는 것의 중요성"
+      ],
+      "helpful_phrases": [
+        "천천히 해도 괜찮아요.",
+        "변화에는 시간이 필요해요.",
+        "빨리 나아지려 하지 않으셔도 돼요."
+      ]
+    }
+  ],
+  "communication_styles": {
+    "formal_speech": {
+      "description": "한국어의 존댓말 사용",
+      "importance": "내담자에 대한 존중 표현",
+      "examples": [
+        "~하셨군요",
+        "~느끼시나요?",
+        "말씀해 주시겠어요?"
+      ]
+    },
+    "indirect_communication": {
+      "description": "직접적 표현보다 간접적 표현 선호",
+      "counseling_tip": "은유나 이야기를 활용한 접근이 효과적일 수 있음"
+    }
+  },
+  "crisis_resources": {
+    "suicide_prevention": {
+      "name": "자살예방상담전화",
+      "number": "1393",
+      "hours": "24시간"
+    },
+    "mental_health_crisis": {
+      "name": "정신건강위기상담전화",
+      "number": "1577-0199",
+      "hours": "24시간"
+    },
+    "domestic_violence": {
+      "name": "여성긴급전화",
+      "number": "1366",
+      "hours": "24시간"
+    },
+    "child_abuse": {
+      "name": "아동학대신고",
+      "number": "112",
+      "hours": "24시간"
+    }
+  }
+}

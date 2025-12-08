@@ -44,3 +44,66 @@ api:
   port: 8000
   rate_limit: 100
   timeout: 30
+
+# Enhanced Features (신규 모듈 설정)
+# =================================
+
+# 응답 검증 설정
+validation:
+  enabled: true
+  min_empathy_score: 0.5
+  require_safety_check: true
+  max_repetition_ratio: 0.3
+  regenerate_on_failure: true
+
+# 대화 상태 관리
+conversation_state:
+  enabled: true
+  auto_phase_progression: true
+  track_emotions: true
+  identify_concerns: true
+
+# 향상된 RAG 설정
+enhanced_rag:
+  enabled: true
+  query_expansion: true
+  relevance_threshold: 0.5
+  max_context_length: 1000
+
+# LLM 평가 시스템
+evaluation:
+  enabled: true
+  metrics:
+    empathy: 0.30
+    safety: 0.25
+    therapeutic: 0.20
+    cultural: 0.15
+    coherence: 0.10
+  min_passing_score: 0.6
+
+# A/B 테스트 설정
+experiments:
+  enabled: true
+  default_sample_size: 1000
+  significance_level: 0.05
+
+# 모니터링 대시보드
+dashboard:
+  enabled: true
+  update_interval_seconds: 30
+  history_retention_hours: 168
+  alert_cooldown_minutes: 5
+
+# 파인튜닝 설정
+finetuning:
+  method: "qlora"
+  output_dir: "./outputs/finetuned_model"
+  lora:
+    r: 16
+    alpha: 32
+    dropout: 0.05
+  training:
+    epochs: 3
+    batch_size: 2
+    learning_rate: 0.0002
+    gradient_accumulation_steps: 8

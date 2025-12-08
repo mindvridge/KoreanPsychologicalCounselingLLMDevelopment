@@ -3,6 +3,9 @@ torch>=2.0.0
 transformers>=4.35.0
 accelerate>=0.24.0
 bitsandbytes>=0.41.0  # 4-bit quantization support
+peft>=0.7.0  # LoRA/QLoRA fine-tuning
+scipy>=1.11.0  # Statistical analysis for A/B testing
+datasets>=2.15.0  # Hugging Face datasets for training
 
 # Web Interface
 gradio>=4.0.0
