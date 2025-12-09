@@ -1,0 +1,178 @@
+# =============================================================================
+# 하이브리드 테스트 설정 (Hybrid Test Configuration)
+# =============================================================================
+# LLM: ChatGPT API (클라우드)
+# STT/TTS: 로컬 GPU (RTX 5060 Ti 16GB)
+#
+# 테스트 완료 후 → A100 클라우드로 전환 (오픈소스 LLM)
+# =============================================================================
+
+# =================================
+# LLM Configuration (ChatGPT API)
+# =================================
+model:
+  provider: "openai"
+  name: "gpt-4o-mini"  # gpt-4o, gpt-4o-mini, gpt-4-turbo
+
+  openai:
+    temperature: 0.7
+    max_tokens: 500
+    top_p: 0.9
+    frequency_penalty: 0.0
+    presence_penalty: 0.0
+    track_cost: true
+
+# =================================
+# STT Configuration (로컬 GPU)
+# =================================
+stt:
+  enabled: true
+  model: "large-v3"  # Whisper large-v3 (최고 정확도)
+  device: "cuda"
+  compute_type: "float16"
+  language: "ko"
+  use_faster_whisper: true
+
+  vad:
+    enabled: true
+    aggressiveness: 3
+    frame_duration_ms: 30
+    min_speech_duration_ms: 250
+    max_speech_duration_s: 30
+
+# =================================
+# TTS Configuration (로컬 GPU)
+# =================================
+tts:
+  enabled: true
+  model: "Zyphra/Zonos-v0.1-transformer"
+  device: "cuda"
+  default_voice_profile: "korean_counselor"
+  output_sample_rate: 44100
+
+  counselor_voice:
+    speaking_rate: 0.9
+    pitch: -2.0
+    default_emotion: "calm"
+    emotion_intensity: 0.6
+
+# Voice Cloning (로컬 GPU)
+voice_cloning:
+  enabled: true
+  reference_audio_dir: "./voice_profiles"
+  min_reference_duration: 5
+  max_reference_duration: 30
+
+# =================================
+# Safety and Crisis Detection
+# =================================
+safety:
+  crisis_detection_threshold: 0.7
+  auto_alert_professionals: false
+  log_all_conversations: true
+  emergency_contacts:
+    suicide_hotline: "1393"
+    mental_health_hotline: "1577-0199"
+
+# =================================
+# RAG System
+# =================================
+rag:
+  enabled: true
+  knowledge_base_dir: "./knowledge_base"
+  chunk_size: 500
+  chunk_overlap: 50
+  embedding_model: "jhgan/ko-sroberta-multitask"
+  max_results: 3
+
+# =================================
+# Monitoring & Logging
+# =================================
+monitoring:
+  enabled: true
+  retention_days: 30
+
+logging:
+  log_dir: "./logs"
+  retention_days: 30
+  enable_encryption: false
+  mask_pii: true
+  log_level: "INFO"
+
+# =================================
+# API Configuration
+# =================================
+api:
+  host: "127.0.0.1"
+  port: 8000
+  rate_limit: 100
+  timeout: 60
+
+voice_api:
+  host: "127.0.0.1"
+  port: 8001
+  cors_origins: ["*"]
+  max_audio_size_mb: 50
+
+# =================================
+# Voice Streaming
+# =================================
+voice_streaming:
+  enabled: true
+  chunk_duration: 2.0
+  sample_rate: 16000
+  channels: 1
+  websocket_timeout: 300
+
+# =================================
+# Enhanced Features
+# =================================
+validation:
+  enabled: true
+  min_empathy_score: 0.5
+  require_safety_check: true
+  regenerate_on_failure: true
+
+conversation_state:
+  enabled: true
+  auto_phase_progression: true
+  track_emotions: true
+  identify_concerns: true
+
+enhanced_rag:
+  enabled: true
+  query_expansion: true
+  relevance_threshold: 0.5
+  max_context_length: 1000
+
+evaluation:
+  enabled: false  # 테스트 시 비활성화
+
+experiments:
+  enabled: false
+
+dashboard:
+  enabled: false
+
+# =================================
+# Batch Processing (비활성화)
+# =================================
+batch_processing:
+  enabled: false
+  strategy: "disabled"
+
+# =============================================================================
+# VRAM 사용량 예상 (RTX 5060 Ti 16GB)
+# =============================================================================
+# LLM: 0GB (ChatGPT API 사용)
+# Whisper large-v3: ~10GB
+# Zonos TTS: ~6GB
+# ---------------------------------
+# 총 예상: ~16GB ✓ (딱 맞음)
+# =============================================================================
+#
+# 비용 예상 (ChatGPT API - gpt-4o-mini):
+# - 1회 상담 (~2000 토큰): ~$0.0015 (~2원)
+# - 100회 상담: ~$0.15 (~200원)
+# - 1000회 상담: ~$1.5 (~2000원)
+# =============================================================================
