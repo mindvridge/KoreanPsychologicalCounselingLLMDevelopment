@@ -54,3 +54,28 @@ alembic>=1.12.0  # Database migrations (optional)
 # Additional Utilities
 tqdm>=4.66.0
 requests>=2.31.0
+
+# =================================
+# Voice Counseling (음성 상담)
+# =================================
+
+# STT - Speech to Text
+openai-whisper>=20231117  # OpenAI Whisper
+faster-whisper>=1.0.0  # Faster Whisper (CTranslate2 기반, 더 빠름)
+webrtcvad>=2.0.10  # Voice Activity Detection
+
+# TTS - Text to Speech
+# Zonos TTS (설치: pip install git+https://github.com/Zyphra/Zonos.git)
+# zonos>=0.1.0  # Zonos TTS (별도 설치 필요)
+TTS>=0.22.0  # Coqui TTS (대체/보조용)
+gTTS>=2.5.0  # Google TTS (폴백용)
+
+# Audio Processing
+sounddevice>=0.4.6  # 실시간 오디오 입출력
+soundfile>=0.12.1  # 오디오 파일 읽기/쓰기
+librosa>=0.10.1  # 오디오 분석 및 처리
+audioread>=3.0.0  # 다양한 오디오 포맷 지원
+
+# WebSocket for Streaming
+websockets>=12.0  # WebSocket 클라이언트/서버
+aiofiles>=23.2.0  # 비동기 파일 처리
