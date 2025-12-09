@@ -160,3 +160,51 @@ voice_api:
   port: 8001
   cors_origins: ["*"]
   max_audio_size_mb: 50
+
+# =================================
+# 배치 처리 설정 (Batch Processing)
+# =================================
+
+batch_processing:
+  enabled: true
+  strategy: "adaptive"  # disabled, fixed, adaptive, priority
+
+  # 기본 배치 설정
+  min_batch_size: 1
+  max_batch_size: 8
+  max_wait_time_ms: 500  # 최대 대기 시간
+
+  # 적응형 배치 설정
+  adaptive:
+    target_latency_ms: 2000  # 목표 지연 시간
+    adjustment_interval: 10  # N 배치마다 크기 조절
+    latency_history_size: 100
+
+  # 우선순위별 최대 배치 크기
+  priority_max_batch:
+    crisis: 1       # 위기 상담 - 즉시 단일 처리
+    realtime: 2     # 실시간 음성 - 최소 배치
+    premium: 4      # 프리미엄 사용자
+    standard: 8     # 일반 사용자
+    background: 16  # 백그라운드 작업
+
+  # 우선순위별 최대 대기 시간 (ms)
+  priority_max_wait:
+    crisis: 0       # 즉시 처리
+    realtime: 100
+    premium: 300
+    standard: 500
+    background: 2000
+
+  # 위기 감지 키워드 (자동 우선순위 상승)
+  crisis_keywords:
+    - "자살"
+    - "죽고 싶"
+    - "죽을"
+    - "목숨"
+    - "끝내고 싶"
+    - "자해"
+    - "손목"
+    - "뛰어내리"
+    - "살고 싶지 않"
+    - "사라지고 싶"
