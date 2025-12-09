@@ -1,0 +1,157 @@
+# =============================================================================
+# 로컬 테스트 환경 설정 (Local Test Configuration)
+# =============================================================================
+# 하드웨어: RTX 5060 Ti 16GB / Intel Ultra 5 245KF / 32GB RAM
+# 용도: 개발 및 테스트
+
+# Model Configuration (테스트용 경량 모델)
+model:
+  # 테스트 옵션 1: 경량 모델 (빠른 테스트)
+  name: "beomi/KoAlpaca-Polyglot-5.8B"
+
+  # 테스트 옵션 2: 프로덕션 유사 모델 (느리지만 품질 테스트)
+  # name: "beomi/OPEN-SOLAR-KO-10.7B"
+
+  quantization: "4bit"
+  torch_dtype: "float16"
+  max_memory: "14GB"  # 16GB 중 여유 확보
+  device_map: "auto"
+  generation:
+    max_length: 256
+    temperature: 0.7
+    top_p: 0.9
+    repetition_penalty: 1.1
+
+# Safety and Crisis Detection
+safety:
+  crisis_detection_threshold: 0.7
+  auto_alert_professionals: false
+  log_all_conversations: true
+
+# RAG System
+rag:
+  knowledge_base_dir: "./knowledge_base"
+  chunk_size: 500
+  chunk_overlap: 50
+  embedding_model: "jhgan/ko-sroberta-multitask"
+  max_results: 3
+
+# Monitoring
+monitoring:
+  enabled: true
+  retention_days: 7  # 테스트용 짧게
+
+# Logging
+logging:
+  log_dir: "./logs"
+  retention_days: 7
+  enable_encryption: false  # 테스트용 비활성화
+  mask_pii: true
+
+# API
+api:
+  host: "127.0.0.1"  # 로컬만
+  port: 8000
+  rate_limit: 50
+  timeout: 60  # 테스트용 여유있게
+
+# =================================
+# Enhanced Features
+# =================================
+
+validation:
+  enabled: true
+  min_empathy_score: 0.4  # 테스트용 낮춤
+  require_safety_check: true
+  max_repetition_ratio: 0.3
+  regenerate_on_failure: false  # 테스트용 비활성화
+
+conversation_state:
+  enabled: true
+  auto_phase_progression: true
+  track_emotions: true
+  identify_concerns: true
+
+enhanced_rag:
+  enabled: true
+  query_expansion: false  # 테스트용 비활성화 (속도)
+  relevance_threshold: 0.4
+  max_context_length: 800
+
+evaluation:
+  enabled: false  # 테스트 시 필요할 때만 활성화
+
+experiments:
+  enabled: false  # 테스트용 비활성화
+
+dashboard:
+  enabled: false  # 테스트용 비활성화
+
+finetuning:
+  method: "qlora"
+  output_dir: "./outputs/finetuned_model"
+  lora:
+    r: 8  # 테스트용 축소
+    alpha: 16
+    dropout: 0.05
+  training:
+    epochs: 1
+    batch_size: 1
+    learning_rate: 0.0002
+    gradient_accumulation_steps: 4
+
+# =================================
+# 음성 상담 설정 (테스트용)
+# =================================
+
+stt:
+  enabled: true
+  model: "medium"  # large-v3 대신 medium (더 빠름)
+  device: "cuda"
+  compute_type: "float16"
+  language: "ko"
+  use_faster_whisper: true
+  vad:
+    enabled: true
+    aggressiveness: 2
+    frame_duration_ms: 30
+
+tts:
+  enabled: true
+  # Zonos 대신 Coqui TTS 또는 gTTS 사용 (테스트용)
+  model: "tts_models/multilingual/multi-dataset/xtts_v2"
+  device: "cuda"
+  default_voice_profile: null
+  output_sample_rate: 22050
+  counselor_voice:
+    speaking_rate: 1.0
+    pitch: 0.0
+    default_emotion: "neutral"
+    emotion_intensity: 0.5
+
+voice_cloning:
+  enabled: false  # 테스트용 비활성화
+
+voice_streaming:
+  enabled: true
+  chunk_duration: 3.0  # 더 긴 청크 (안정성)
+  sample_rate: 16000
+  channels: 1
+  websocket_timeout: 120
+
+voice_api:
+  host: "127.0.0.1"
+  port: 8001
+  cors_origins: ["*"]
+  max_audio_size_mb: 25
+
+# =================================
+# 배치 처리 (테스트용 단순화)
+# =================================
+
+batch_processing:
+  enabled: false  # 테스트 시 단일 처리
+  strategy: "disabled"
+  min_batch_size: 1
+  max_batch_size: 2
+  max_wait_time_ms: 100
