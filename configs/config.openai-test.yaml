@@ -1,0 +1,135 @@
+# =============================================================================
+# OpenAI API 테스트 설정 (ChatGPT API)
+# =============================================================================
+# GPU 없이 테스트 가능
+# 비용: GPT-4o-mini 기준 ~$0.0006/1K 토큰 (매우 저렴)
+# =============================================================================
+
+# LLM Configuration (OpenAI API)
+model:
+  provider: "openai"  # openai, local, mock
+  name: "gpt-4o-mini"  # gpt-4o, gpt-4o-mini, gpt-4-turbo
+
+  # OpenAI 설정
+  openai:
+    temperature: 0.7
+    max_tokens: 500
+    top_p: 0.9
+    frequency_penalty: 0.0
+    presence_penalty: 0.0
+    track_cost: true
+
+  # 대체 모델 (비용 절감)
+  # name: "gpt-3.5-turbo"
+
+# Safety and Crisis Detection
+safety:
+  crisis_detection_threshold: 0.7
+  auto_alert_professionals: false
+  log_all_conversations: true
+  emergency_contacts:
+    suicide_hotline: "1393"
+    mental_health_hotline: "1577-0199"
+
+# RAG System (선택적)
+rag:
+  enabled: true
+  knowledge_base_dir: "./knowledge_base"
+  chunk_size: 500
+  chunk_overlap: 50
+  embedding_model: "jhgan/ko-sroberta-multitask"
+  max_results: 3
+
+# Monitoring
+monitoring:
+  enabled: true
+  retention_days: 7
+
+# Logging
+logging:
+  log_dir: "./logs"
+  retention_days: 7
+  enable_encryption: false
+  mask_pii: true
+  log_level: "DEBUG"
+
+# API Configuration
+api:
+  host: "127.0.0.1"
+  port: 8000
+  rate_limit: 50
+  timeout: 60
+
+# =================================
+# Enhanced Features (테스트용 간소화)
+# =================================
+
+validation:
+  enabled: true
+  min_empathy_score: 0.4
+  require_safety_check: true
+  regenerate_on_failure: false
+
+conversation_state:
+  enabled: true
+  auto_phase_progression: true
+  track_emotions: true
+
+enhanced_rag:
+  enabled: false  # 테스트 시 비활성화
+
+evaluation:
+  enabled: false
+
+experiments:
+  enabled: false
+
+dashboard:
+  enabled: false
+
+# =================================
+# 음성 상담 설정 (테스트용)
+# =================================
+
+stt:
+  enabled: true
+  model: "base"  # 테스트용 경량 모델
+  device: "cpu"  # GPU 없이 테스트
+  compute_type: "int8"
+  language: "ko"
+  use_faster_whisper: true
+
+tts:
+  enabled: false  # 테스트 시 비활성화 (텍스트만)
+  # 또는 gTTS 사용
+  # model: "gtts"
+  # device: "cpu"
+
+voice_streaming:
+  enabled: false
+
+voice_api:
+  host: "127.0.0.1"
+  port: 8001
+
+# =================================
+# 배치 처리 (비활성화)
+# =================================
+
+batch_processing:
+  enabled: false
+  strategy: "disabled"
+
+# =================================
+# 모델별 예상 비용 (1K 토큰 기준)
+# =================================
+# gpt-4o:        입력 $0.005,  출력 $0.015
+# gpt-4o-mini:   입력 $0.00015, 출력 $0.0006 ← 권장
+# gpt-4-turbo:   입력 $0.01,   출력 $0.03
+# gpt-3.5-turbo: 입력 $0.0005, 출력 $0.0015
+#
+# 예상 비용 (gpt-4o-mini, 1회 상담 ~2000 토큰 기준):
+# - 1회 상담: ~$0.0015 (약 2원)
+# - 100회 상담: ~$0.15 (약 200원)
+# - 1000회 상담: ~$1.5 (약 2000원)
+# =============================================================================
