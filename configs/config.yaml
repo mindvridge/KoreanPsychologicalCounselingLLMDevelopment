@@ -3,6 +3,10 @@
 
 # Model Configuration
 model:
+  # provider: "local" (기본값, 실제 LLM 사용)
+  # provider: "openai" (OpenAI API 사용)
+  # provider: "mock" (테스트용 Mock LLM)
+  provider: "mock"  # 테스트용 - 실제 배포 시 "local" 또는 "openai"로 변경
   name: "beomi/OPEN-SOLAR-KO-10.7B"
   quantization: "4bit"
   max_memory: "40GB"
