@@ -1336,11 +1336,11 @@ async def list_personas(
 
     Returns list of counselor personas with their characteristics
     """
+    global persona_manager
     # persona_manager가 없으면 직접 초기화 시도
     if not persona_manager:
         try:
             if PersonaManager:
-                global persona_manager
                 persona_manager = PersonaManager()
                 logger.info("PersonaManager initialized on-demand")
             else:
@@ -1464,11 +1464,11 @@ async def recommend_personas(
 
     Returns recommended personas ranked by suitability with personalization markers (⭐)
     """
+    global persona_manager
     # persona_manager가 없으면 직접 초기화 시도
     if not persona_manager:
         try:
             if PersonaManager:
-                global persona_manager
                 persona_manager = PersonaManager()
                 logger.info("PersonaManager initialized on-demand")
             else:
