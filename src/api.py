@@ -418,7 +418,13 @@ async def startup_event():
         global mental_health_system, personalization_manager, persona_manager
         try:
             # Initialize integrated system
-            config_path = os.getenv("CONFIG_PATH", "configs/config.yaml")
+            # .env 파일에서 CONFIG_PATH를 먼저 확인하고, 없으면 기본값 사용
+            config_path = os.getenv("CONFIG_PATH")
+            if not config_path:
+                # .env 파일에서 직접 읽기 시도
+                from dotenv import load_dotenv
+                load_dotenv()
+                config_path = os.getenv("CONFIG_PATH", "configs/config.openai-test.yaml")
             logger.info(f"Initializing system with config: {config_path}")
             mental_health_system = IntegratedMentalHealthSystem(config_path=config_path)
 
@@ -430,6 +436,16 @@ async def startup_event():
                 logger.warning("API will run in degraded mode")
             else:
                 logger.info("All components initialized successfully")
+            
+            # LLM 초기화 상태 확인
+            if mental_health_system.llm:
+                logger.info(f"✅ LLM initialized: {type(mental_health_system.llm).__name__}")
+            else:
+                logger.error("❌ LLM initialization failed!")
+                if mental_health_system.initialization_errors:
+                    for component, error in mental_health_system.initialization_errors:
+                        if component == "llm":
+                            logger.error(f"LLM initialization error: {error}")
 
             # Initialize personalization manager (long-term memory)
             if os.getenv("ENABLE_LONG_TERM_MEMORY", "true").lower() == "true":
@@ -532,9 +548,20 @@ async def health_check():
     Returns system status and component health
     """
     if not mental_health_system:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="System not initialized"
+        # Return degraded status instead of raising exception
+        return HealthResponse(
+            status="initializing",
+            timestamp=datetime.now().isoformat(),
+            components={
+                "llm": False,
+                "crisis_detector": False,
+                "emotion_analyzer": False,
+                "assessment_manager": False,
+                "rag_system": False,
+                "monitoring": False,
+                "logging": False
+            },
+            uptime_seconds=0
         )
 
     # Validate components
@@ -575,18 +602,55 @@ async def chat(
     """
     start_time = datetime.now()
 
-    if not mental_health_system or not mental_health_system.is_initialized:
+    # Check if system is initialized
+    if not mental_health_system:
+        logger.warning("Chat request received but mental_health_system is None")
         api_requests.labels(method="POST", endpoint="/chat", status="503").inc()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="System not initialized. Please try again later."
+            detail="System is still initializing. Please wait a moment and try again."
         )
+    
+    if not hasattr(mental_health_system, 'is_initialized'):
+        logger.error("mental_health_system missing is_initialized attribute")
+        api_requests.labels(method="POST", endpoint="/chat", status="503").inc()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="System initialization incomplete. Please try again later."
+        )
+    
+    if not mental_health_system.is_initialized:
+        logger.warning(f"Chat request received but system not initialized. is_initialized={mental_health_system.is_initialized}")
+        api_requests.labels(method="POST", endpoint="/chat", status="503").inc()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="System is still initializing. Please wait a moment and try again."
+        )
+    
+    # Check if LLM is actually available (critical component)
+    # LLM이 없어도 process_message가 기본 응답을 반환하므로 허용
+    if not hasattr(mental_health_system, 'llm') or mental_health_system.llm is None:
+        logger.warning("Chat request received but LLM is not initialized. Will use fallback response.")
+        # LLM이 없어도 process_message가 기본 응답을 반환하므로 계속 진행
 
     try:
         # Get or create session
-        session_id = get_or_create_session(chat_request.session_id)
+        try:
+            session_id = get_or_create_session(chat_request.session_id)
+        except Exception as e:
+            logger.error(f"Error creating/getting session: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create session: {str(e)}"
+            )
 
         # Get session data
+        if session_id not in sessions:
+            logger.error(f"Session {session_id} not found in sessions dict")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Session creation failed"
+            )
         session_data = sessions[session_id]
 
         # Personalization: Get or create user
@@ -624,18 +688,49 @@ async def chat(
             enhanced_message = f"{user_context}\n\n[사용자 메시지]\n{chat_request.message}"
 
         # Process message through integrated system
-        result = mental_health_system.process_message(
-            session_id=session_id,
-            user_message=enhanced_message,
-            conversation_history=history
-        )
-
-        # Check for errors
-        if "error" in result:
-            api_requests.labels(method="POST", endpoint="/chat", status="500").inc()
+        try:
+            result = mental_health_system.process_message(
+                session_id=session_id,
+                user_message=enhanced_message,
+                conversation_history=history
+            )
+            
+            # Check if result is None or invalid
+            if result is None:
+                logger.error("process_message returned None")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="System returned invalid response"
+                )
+            
+            # Check for errors
+            if "error" in result:
+                logger.error(f"process_message returned error: {result.get('error')}")
+                api_requests.labels(method="POST", endpoint="/chat", status="500").inc()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=result["error"]
+                )
+            
+            # Check if response key exists
+            if "response" not in result:
+                logger.error(f"process_message result missing 'response' key: {result.keys()}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="System returned invalid response format"
+                )
+                
+        except AttributeError as e:
+            logger.error(f"AttributeError in process_message: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result["error"]
+                detail=f"System error: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"Error in process_message: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to process message: {str(e)}"
             )
 
         # Prepend personalized greeting if applicable
