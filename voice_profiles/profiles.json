@@ -1,0 +1,53 @@
+{
+  "profiles": [
+    {
+      "id": "seoyun_counselor",
+      "name": "서윤쌤",
+      "display_name": "서윤 상담사",
+      "description": "따뜻하고 차분한 여성 상담사 목소리",
+      "gender": "female",
+      "language": "ko",
+      "audio_file": "seoyun_counselor.mp3",
+      "settings": {
+        "speed": 0.95,
+        "stability": 0.75,
+        "similarity_boost": 0.80,
+        "style": 0.50
+      },
+      "emotion_presets": {
+        "calm": {
+          "speed": 0.90,
+          "pitch_shift": 0
+        },
+        "empathetic": {
+          "speed": 0.85,
+          "pitch_shift": -0.5
+        },
+        "encouraging": {
+          "speed": 1.0,
+          "pitch_shift": 0.5
+        },
+        "supportive": {
+          "speed": 0.92,
+          "pitch_shift": 0
+        }
+      },
+      "suitable_for": [
+        "general_counseling",
+        "anxiety",
+        "depression",
+        "stress",
+        "relationships"
+      ],
+      "created_at": "2024-12-10",
+      "source": "ElevenLabs",
+      "is_default": true
+    }
+  ],
+  "default_profile": "seoyun_counselor",
+  "settings": {
+    "sample_rate": 24000,
+    "format": "mp3",
+    "normalize_audio": true
+  }
+}
