@@ -8,11 +8,32 @@ const CONFIG = {
         ? 'http://localhost:8000/api/v1'
         : '/api/v1',
 
+    // Voice API Base URL
+    VOICE_API_BASE_URL: window.location.hostname === 'localhost'
+        ? 'http://localhost:8001/api/v1'
+        : '/voice-api/v1',
+
+    // WebSocket URL for Voice
+    VOICE_WS_URL: window.location.hostname === 'localhost'
+        ? 'ws://localhost:8001'
+        : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/voice-ws`,
+
     // API Key (if required - should be configured on backend or use auth)
     API_KEY: null, // Set if backend requires API key
 
     // Default Settings
     DEFAULT_TOP_K: 3,
+
+    // Voice Settings
+    VOICE: {
+        SAMPLE_RATE: 16000,
+        BUFFER_SIZE: 4096,
+        SILENCE_THRESHOLD: 0.01,
+        SILENCE_DURATION: 1500, // ms
+        VAD_ENABLED: true,
+        DEFAULT_VISUALIZER: 'waveform',
+        DEFAULT_VOICE_PROFILE: 'calm_counselor'
+    },
 
     // Session Storage Keys
     STORAGE_KEYS: {

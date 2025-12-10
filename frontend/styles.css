@@ -1203,3 +1203,421 @@ body {
         max-height: 100vh;
     }
 }
+
+/* ============================================================================
+   Voice Chat Styles
+   ============================================================================ */
+
+/* Mode Toggle */
+.chat-mode-toggle {
+    display: flex;
+    gap: 0.5rem;
+    background: var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 4px;
+}
+
+.mode-btn {
+    background: transparent;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-size: 1.25rem;
+}
+
+.mode-btn:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.mode-btn.active {
+    background: var(--surface-color);
+    box-shadow: var(--shadow-sm);
+}
+
+.mode-icon {
+    display: block;
+}
+
+/* Voice Input Container */
+.voice-input-container {
+    background: #1a1a2e;
+    padding: var(--spacing-md);
+    border-top: 1px solid #2d2d44;
+}
+
+.voice-visualizer-container {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+}
+
+.voice-visualizer {
+    flex: 1;
+    height: 80px;
+    border-radius: var(--radius-md);
+    background: #0f0f1a;
+}
+
+.level-meter-container {
+    width: 20px;
+}
+
+/* Voice Status */
+.voice-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+    color: white;
+}
+
+.voice-status-icon {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #4A90A4;
+}
+
+.voice-status-icon.ready {
+    background: #10b981;
+    animation: pulse-status 2s infinite;
+}
+
+.voice-status-icon.recording {
+    background: #ef4444;
+    animation: pulse-status 0.5s infinite;
+}
+
+.voice-status-icon.processing {
+    background: #f59e0b;
+    animation: pulse-status 1s infinite;
+}
+
+.voice-status-icon.error {
+    background: #ef4444;
+}
+
+@keyframes pulse-status {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.voice-status-text {
+    font-size: 0.875rem;
+    color: #a0a0b0;
+}
+
+/* Live Transcript */
+.live-transcript-container {
+    min-height: 40px;
+    margin-bottom: var(--spacing-md);
+}
+
+.live-transcript {
+    color: white;
+    font-size: 1rem;
+    text-align: center;
+    padding: var(--spacing-sm);
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-md);
+    min-height: 40px;
+}
+
+.live-transcript.final {
+    color: #7ED6DF;
+}
+
+/* Voice Controls */
+.voice-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-lg);
+}
+
+.voice-record-btn {
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    border: 3px solid #4A90A4;
+    background: transparent;
+    color: #4A90A4;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.voice-record-btn:hover:not(:disabled) {
+    background: rgba(74, 144, 164, 0.1);
+    transform: scale(1.05);
+}
+
+.voice-record-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.voice-record-btn.recording {
+    border-color: #ef4444;
+    color: #ef4444;
+    animation: recording-pulse 1s infinite;
+}
+
+@keyframes recording-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    50% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+}
+
+.record-icon {
+    font-size: 1.5rem;
+}
+
+.record-text {
+    font-size: 0.75rem;
+}
+
+.voice-settings {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.voice-settings-btn {
+    background: transparent;
+    border: 1px solid #4A90A4;
+    color: #4A90A4;
+    padding: 0.5rem;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.visualizer-select {
+    background: #2d2d44;
+    color: white;
+    border: 1px solid #4A90A4;
+    border-radius: var(--radius-md);
+    padding: 0.5rem;
+    font-size: 0.875rem;
+}
+
+/* Voice Chat Full Screen */
+.voice-chat-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: linear-gradient(180deg, #0f0f1a 0%, #1a1a2e 100%);
+    color: white;
+}
+
+.voice-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.voice-main-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: var(--spacing-lg);
+    overflow: hidden;
+}
+
+/* Counselor Response Area */
+.voice-response-area {
+    text-align: center;
+    padding: var(--spacing-lg);
+}
+
+.counselor-speaking-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+}
+
+.speaking-avatar {
+    font-size: 4rem;
+    width: 100px;
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(74, 144, 164, 0.2);
+    border-radius: 50%;
+    transition: all var(--transition-base);
+}
+
+.counselor-speaking-indicator.active .speaking-avatar {
+    background: rgba(74, 144, 164, 0.4);
+    box-shadow: 0 0 30px rgba(74, 144, 164, 0.5);
+}
+
+.speaking-waves {
+    display: flex;
+    gap: 4px;
+    height: 30px;
+    align-items: center;
+}
+
+.speaking-waves span {
+    width: 4px;
+    height: 10px;
+    background: #4A90A4;
+    border-radius: 2px;
+    opacity: 0.3;
+}
+
+.counselor-speaking-indicator.active .speaking-waves span {
+    opacity: 1;
+    animation: wave 0.5s ease-in-out infinite;
+}
+
+.counselor-speaking-indicator.active .speaking-waves span:nth-child(1) { animation-delay: 0s; }
+.counselor-speaking-indicator.active .speaking-waves span:nth-child(2) { animation-delay: 0.1s; }
+.counselor-speaking-indicator.active .speaking-waves span:nth-child(3) { animation-delay: 0.2s; }
+.counselor-speaking-indicator.active .speaking-waves span:nth-child(4) { animation-delay: 0.1s; }
+.counselor-speaking-indicator.active .speaking-waves span:nth-child(5) { animation-delay: 0s; }
+
+@keyframes wave {
+    0%, 100% { height: 10px; }
+    50% { height: 25px; }
+}
+
+.counselor-response-text {
+    font-size: 1.25rem;
+    line-height: 1.6;
+    max-width: 600px;
+    margin: 0 auto;
+    color: #e0e0e0;
+}
+
+.counselor-response-text.safety-alert {
+    color: #ef4444;
+    font-weight: 600;
+}
+
+/* Full Visualizer */
+.voice-full-visualizer {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+}
+
+.full-visualizer {
+    width: 100%;
+    max-width: 500px;
+    height: 200px;
+    border-radius: var(--radius-lg);
+}
+
+/* User Speaking Area */
+.user-speaking-area {
+    text-align: center;
+    padding: var(--spacing-lg);
+}
+
+.user-transcript {
+    font-size: 1.125rem;
+    color: #7ED6DF;
+    min-height: 30px;
+    margin-bottom: var(--spacing-md);
+}
+
+.recording-indicator-container {
+    display: flex;
+    justify-content: center;
+}
+
+/* Voice Full Controls */
+.voice-full-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.control-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 2px solid #4A90A4;
+    background: transparent;
+    color: #4A90A4;
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.control-btn:hover {
+    background: rgba(74, 144, 164, 0.2);
+}
+
+.voice-record-btn.large {
+    width: 90px;
+    height: 90px;
+    font-size: 2rem;
+}
+
+/* Voice Chat Responsive */
+@media (max-width: 768px) {
+    .voice-visualizer {
+        height: 60px;
+    }
+
+    .voice-record-btn {
+        width: 60px;
+        height: 60px;
+    }
+
+    .voice-record-btn.large {
+        width: 70px;
+        height: 70px;
+    }
+
+    .counselor-response-text {
+        font-size: 1rem;
+    }
+
+    .speaking-avatar {
+        font-size: 3rem;
+        width: 80px;
+        height: 80px;
+    }
+}
+
+@media (max-width: 480px) {
+    .chat-mode-toggle {
+        display: none;
+    }
+
+    .voice-controls {
+        flex-wrap: wrap;
+    }
+
+    .voice-settings {
+        width: 100%;
+        justify-content: center;
+        margin-top: var(--spacing-sm);
+    }
+}

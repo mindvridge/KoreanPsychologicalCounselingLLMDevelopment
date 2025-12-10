@@ -111,6 +111,14 @@
                             <p id="chat-counselor-specialty">전문 분야</p>
                         </div>
                     </div>
+                    <div class="chat-mode-toggle">
+                        <button id="text-mode-btn" class="mode-btn active" title="텍스트 채팅">
+                            <span class="mode-icon">💬</span>
+                        </button>
+                        <button id="voice-mode-btn" class="mode-btn" title="음성 채팅">
+                            <span class="mode-icon">🎤</span>
+                        </button>
+                    </div>
                     <button id="end-session-btn" class="btn-danger-small">상담 종료</button>
                 </div>
 
@@ -121,8 +129,8 @@
                     </div>
                 </div>
 
-                <!-- Chat Input -->
-                <div class="chat-input-container">
+                <!-- Text Chat Input -->
+                <div class="chat-input-container" id="text-input-container">
                     <div class="chat-input-wrapper">
                         <textarea id="chat-input" placeholder="메시지를 입력하세요..." rows="1"></textarea>
                         <button id="send-message-btn" class="btn-send">전송</button>
@@ -130,6 +138,105 @@
                     <div class="chat-info">
                         <small>💡 위기 상황 시 즉시 전문가의 도움을 받으세요: 자살예방상담전화 ☎️ 1393</small>
                     </div>
+                </div>
+
+                <!-- Voice Chat Input -->
+                <div class="voice-input-container" id="voice-input-container" style="display: none;">
+                    <!-- Voice Visualizer -->
+                    <div class="voice-visualizer-container">
+                        <canvas id="voice-visualizer" class="voice-visualizer"></canvas>
+                        <div id="level-meter-container" class="level-meter-container"></div>
+                    </div>
+
+                    <!-- Voice Status -->
+                    <div class="voice-status">
+                        <div id="voice-status-icon" class="voice-status-icon"></div>
+                        <span id="voice-status-text" class="voice-status-text">음성 채팅 준비 중...</span>
+                    </div>
+
+                    <!-- Live Transcript -->
+                    <div class="live-transcript-container">
+                        <div id="live-transcript" class="live-transcript"></div>
+                    </div>
+
+                    <!-- Voice Controls -->
+                    <div class="voice-controls">
+                        <button id="voice-record-btn" class="voice-record-btn" disabled>
+                            <span class="record-icon">🎤</span>
+                            <span class="record-text">말하기</span>
+                        </button>
+                        <div class="voice-settings">
+                            <button id="voice-settings-btn" class="voice-settings-btn" title="설정">
+                                ⚙️
+                            </button>
+                            <select id="visualizer-type" class="visualizer-select">
+                                <option value="waveform">파형</option>
+                                <option value="spectrum">스펙트럼</option>
+                                <option value="bars">바</option>
+                                <option value="circle">원형</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="chat-info">
+                        <small>🎤 마이크 버튼을 누르고 말씀해주세요 | 자살예방상담전화 ☎️ 1393</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Voice Chat Screen (Full Screen Mode) -->
+        <div id="voice-screen" class="screen">
+            <div class="voice-chat-container">
+                <!-- Voice Header -->
+                <div class="voice-header">
+                    <button id="voice-back-btn" class="btn-icon">← 돌아가기</button>
+                    <div class="counselor-info">
+                        <div class="counselor-avatar" id="voice-counselor-avatar">👨‍⚕️</div>
+                        <div>
+                            <h4 id="voice-counselor-name">상담사</h4>
+                            <p id="voice-connection-status">연결 중...</p>
+                        </div>
+                    </div>
+                    <button id="voice-end-btn" class="btn-danger-small">상담 종료</button>
+                </div>
+
+                <!-- Main Voice Area -->
+                <div class="voice-main-area">
+                    <!-- Counselor Response -->
+                    <div class="voice-response-area">
+                        <div class="counselor-speaking-indicator" id="counselor-speaking">
+                            <div class="speaking-avatar" id="speaking-avatar">👨‍⚕️</div>
+                            <div class="speaking-waves">
+                                <span></span><span></span><span></span><span></span><span></span>
+                            </div>
+                        </div>
+                        <div id="counselor-response-text" class="counselor-response-text"></div>
+                    </div>
+
+                    <!-- Full Visualizer -->
+                    <div class="voice-full-visualizer">
+                        <canvas id="full-visualizer" class="full-visualizer"></canvas>
+                    </div>
+
+                    <!-- User Speaking Area -->
+                    <div class="user-speaking-area">
+                        <div id="user-transcript" class="user-transcript"></div>
+                        <div id="recording-indicator-container" class="recording-indicator-container"></div>
+                    </div>
+                </div>
+
+                <!-- Voice Full Controls -->
+                <div class="voice-full-controls">
+                    <button id="mute-btn" class="control-btn" title="음소거">
+                        <span>🔊</span>
+                    </button>
+                    <button id="full-record-btn" class="voice-record-btn large">
+                        <span class="record-icon">🎤</span>
+                    </button>
+                    <button id="switch-to-text-btn" class="control-btn" title="텍스트로 전환">
+                        <span>💬</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -362,6 +469,9 @@
     <!-- Scripts -->
     <script src="config.js"></script>
     <script src="legal-docs.js"></script>
+    <script src="voice.js"></script>
+    <script src="audio-visualizer.js"></script>
+    <script src="voice-app.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
