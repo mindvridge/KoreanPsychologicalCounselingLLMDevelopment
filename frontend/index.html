@@ -142,6 +142,12 @@
 
                 <!-- Voice Chat Input -->
                 <div class="voice-input-container" id="voice-input-container" style="display: none;">
+                    <!-- Emotion Display & Wait Time -->
+                    <div class="voice-feedback-row">
+                        <div id="emotion-display-container" class="emotion-display-container"></div>
+                        <div id="wait-time-container" class="wait-time-container"></div>
+                    </div>
+
                     <!-- Voice Visualizer -->
                     <div class="voice-visualizer-container">
                         <canvas id="voice-visualizer" class="voice-visualizer"></canvas>
@@ -161,6 +167,11 @@
 
                     <!-- Voice Controls -->
                     <div class="voice-controls">
+                        <label class="hands-free-toggle" title="핸즈프리 모드">
+                            <input type="checkbox" id="hands-free-mode">
+                            <span class="toggle-icon">🙌</span>
+                            <span class="toggle-label">자동</span>
+                        </label>
                         <button id="voice-record-btn" class="voice-record-btn" disabled>
                             <span class="record-icon">🎤</span>
                             <span class="record-text">말하기</span>
@@ -179,7 +190,7 @@
                     </div>
 
                     <div class="chat-info">
-                        <small>🎤 마이크 버튼을 누르고 말씀해주세요 | 자살예방상담전화 ☎️ 1393</small>
+                        <small>🎤 마이크 버튼 또는 스페이스바 | 🙌 자동 모드: 말하면 자동 인식 | ☎️ 1393</small>
                     </div>
                 </div>
             </div>
@@ -469,6 +480,9 @@
     <!-- Scripts -->
     <script src="config.js"></script>
     <script src="legal-docs.js"></script>
+    <script src="audio-processor.js"></script>
+    <script src="connection-manager.js"></script>
+    <script src="voice-ux.js"></script>
     <script src="voice.js"></script>
     <script src="audio-visualizer.js"></script>
     <script src="voice-app.js"></script>

@@ -1621,3 +1621,117 @@ body {
         margin-top: var(--spacing-sm);
     }
 }
+
+/* ============================================================================
+   Voice UX Enhancements
+   ============================================================================ */
+
+/* Feedback Row */
+.voice-feedback-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+    min-height: 40px;
+}
+
+.emotion-display-container {
+    flex: 1;
+}
+
+.wait-time-container {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Hands-Free Toggle */
+.hands-free-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.1);
+    transition: all var(--transition-fast);
+    color: #a0a0b0;
+}
+
+.hands-free-toggle:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.hands-free-toggle input {
+    display: none;
+}
+
+.hands-free-toggle input:checked + .toggle-icon {
+    transform: scale(1.2);
+}
+
+.hands-free-toggle input:checked ~ .toggle-label {
+    color: #7ED6DF;
+}
+
+.toggle-icon {
+    font-size: 1.25rem;
+    transition: transform var(--transition-fast);
+}
+
+.toggle-label {
+    font-size: 0.75rem;
+    transition: color var(--transition-fast);
+}
+
+/* Accessibility - Screen Reader Only */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Connection Status Badge */
+.connection-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+}
+
+.connection-badge.connected {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.connection-badge.reconnecting {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    animation: blink 1s infinite;
+}
+
+/* Focus Visible for Accessibility */
+.voice-record-btn:focus-visible,
+.control-btn:focus-visible,
+.mode-btn:focus-visible {
+    outline: 2px solid #7ED6DF;
+    outline-offset: 2px;
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+    .voice-record-btn,
+    .speaking-waves span,
+    * {
+        animation: none !important;
+        transition: none !important;
+    }
+}
