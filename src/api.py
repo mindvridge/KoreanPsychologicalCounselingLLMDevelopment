@@ -415,6 +415,7 @@ async def startup_event():
     
     # 서버가 먼저 시작되도록 비동기로 초기화
     async def initialize_system():
+        global mental_health_system, personalization_manager, persona_manager
         try:
             # Initialize integrated system
             config_path = os.getenv("CONFIG_PATH", "configs/config.yaml")
