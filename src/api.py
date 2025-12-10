@@ -24,13 +24,50 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import logging
 
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main_integrated import IntegratedMentalHealthSystem
-from src.safety_system_v2 import RiskLevel
-from src.personalization import PersonalizationManager
-from src.persona_manager import PersonaManager, get_persona_manager
+# 지연 임포트 (서버 시작 후 필요할 때 로드)
+IntegratedMentalHealthSystem = None
+RiskLevel = None
+PersonalizationManager = None
+PersonaManager = None
+get_persona_manager = None
+get_db = None
+Session = None
+
+# 모듈 임포트 시도 (실패해도 서버는 시작)
+try:
+    from main_integrated import IntegratedMentalHealthSystem
+    from src.safety_system_v2 import RiskLevel
+    from src.personalization import PersonalizationManager
+    from src.persona_manager import PersonaManager, get_persona_manager
+    from src.database import get_db
+    from sqlalchemy.orm import Session
+    logger.info("All modules imported successfully")
+except Exception as e:
+    logger.warning(f"Some modules failed to import: {e}")
+    logger.warning("Server will start but some features may be unavailable")
+    # 기본 타입만 임포트
+    from enum import Enum
+    class RiskLevel(Enum):
+        NONE = "NONE"
+        LOW = "LOW"
+        MEDIUM = "MEDIUM"
+        HIGH = "HIGH"
+        CRITICAL = "CRITICAL"
+    # get_db가 None일 때를 위한 더미 함수
+    async def dummy_get_db():
+        return None
+    if get_db is None:
+        get_db = dummy_get_db
 
 # ============================================================================
 # Configuration and Setup
@@ -366,52 +403,65 @@ def cleanup_old_sessions(max_age_hours: int = 24):
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize system on startup"""
+    """Initialize system on startup (non-blocking)"""
     global mental_health_system, personalization_manager, persona_manager
-
+    
+    import asyncio
+    
     logger.info("="*70)
     logger.info("Starting Korean Mental Health Counseling API")
+    logger.info("API server is starting... System initialization will happen in background.")
     logger.info("="*70)
-
-    try:
-        # Initialize integrated system
-        config_path = os.getenv("CONFIG_PATH", "configs/config.yaml")
-        mental_health_system = IntegratedMentalHealthSystem(config_path=config_path)
-
-        # Initialize all components
-        success = mental_health_system.initialize_all_components()
-
-        if not success:
-            logger.error("Failed to initialize some components")
-            logger.warning("API will run in degraded mode")
-        else:
-            logger.info("All components initialized successfully")
-
-        # Initialize personalization manager (long-term memory)
-        if os.getenv("ENABLE_LONG_TERM_MEMORY", "true").lower() == "true":
-            try:
-                personalization_manager = PersonalizationManager()
-                logger.info("✓ PersonalizationManager initialized (long-term memory enabled)")
-            except Exception as e:
-                logger.error(f"Failed to initialize PersonalizationManager: {e}")
-                logger.warning("Long-term memory features will be disabled")
-        else:
-            logger.info("Long-term memory disabled (ENABLE_LONG_TERM_MEMORY=false)")
-
-        # Initialize persona manager (counselor personas)
+    
+    # 서버가 먼저 시작되도록 비동기로 초기화
+    async def initialize_system():
         try:
-            persona_manager = PersonaManager()
-            logger.info(f"✓ PersonaManager initialized ({len(persona_manager.personas)} personas loaded)")
+            # Initialize integrated system
+            config_path = os.getenv("CONFIG_PATH", "configs/config.yaml")
+            logger.info(f"Initializing system with config: {config_path}")
+            mental_health_system = IntegratedMentalHealthSystem(config_path=config_path)
+
+            # Initialize all components
+            success = mental_health_system.initialize_all_components()
+
+            if not success:
+                logger.error("Failed to initialize some components")
+                logger.warning("API will run in degraded mode")
+            else:
+                logger.info("All components initialized successfully")
+
+            # Initialize personalization manager (long-term memory)
+            if os.getenv("ENABLE_LONG_TERM_MEMORY", "true").lower() == "true":
+                try:
+                    personalization_manager = PersonalizationManager()
+                    logger.info("✓ PersonalizationManager initialized (long-term memory enabled)")
+                except Exception as e:
+                    logger.error(f"Failed to initialize PersonalizationManager: {e}")
+                    logger.warning("Long-term memory features will be disabled")
+            else:
+                logger.info("Long-term memory disabled (ENABLE_LONG_TERM_MEMORY=false)")
+
+            # Initialize persona manager (counselor personas)
+            try:
+                persona_manager = PersonaManager()
+                logger.info(f"✓ PersonaManager initialized ({len(persona_manager.personas)} personas loaded)")
+            except Exception as e:
+                logger.error(f"Failed to initialize PersonaManager: {e}")
+                logger.warning("Persona features will be disabled")
+
+            logger.info("API is ready to accept requests")
+            logger.info("="*70)
+
         except Exception as e:
-            logger.error(f"Failed to initialize PersonaManager: {e}")
-            logger.warning("Persona features will be disabled")
-
-        logger.info("API is ready to accept requests")
-        logger.info("="*70)
-
-    except Exception as e:
-        logger.error(f"Failed to initialize system: {e}", exc_info=True)
-        logger.error("API will start but may not function correctly")
+            logger.error(f"Failed to initialize system: {e}", exc_info=True)
+            logger.error("API will start but may not function correctly")
+            # 서버는 계속 실행되도록 함
+            mental_health_system = None
+            personalization_manager = None
+            persona_manager = None
+    
+    # 비동기 태스크로 실행 (서버 블로킹 방지)
+    asyncio.create_task(initialize_system())
 
 
 @app.on_event("shutdown")
@@ -1360,8 +1410,8 @@ async def get_persona(
 @app.post("/api/v1/personas/recommend", response_model=PersonaRecommendationResponse, tags=["Personas"])
 async def recommend_personas(
     recommend_request: PersonaRecommendRequest,
-    db: Session = Depends(get_db),
-    authenticated: bool = Depends(verify_api_key)
+    authenticated: bool = Depends(verify_api_key),
+    db: Session = Depends(get_db)
 ):
     """
     Get persona recommendations based on user profile with personalization
