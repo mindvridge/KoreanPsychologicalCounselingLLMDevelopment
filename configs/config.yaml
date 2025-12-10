@@ -6,8 +6,8 @@ model:
   # provider: "local" (기본값, 실제 LLM 사용)
   # provider: "openai" (OpenAI API 사용)
   # provider: "mock" (테스트용 Mock LLM)
-  provider: "mock"  # 테스트용 - 실제 배포 시 "local" 또는 "openai"로 변경
-  name: "beomi/OPEN-SOLAR-KO-10.7B"
+  provider: "openai"  # ChatGPT API 사용
+  name: "gpt-4o-mini"  # OpenAI 모델명
   quantization: "4bit"
   max_memory: "40GB"
   device_map: "auto"
@@ -15,6 +15,14 @@ model:
     max_length: 300
     temperature: 0.7
     top_p: 0.9
+  # OpenAI API 설정
+  openai:
+    temperature: 0.7
+    max_tokens: 500
+    top_p: 0.9
+    frequency_penalty: 0.0
+    presence_penalty: 0.0
+    track_cost: true
 
 # Safety and Crisis Detection  
 safety:
