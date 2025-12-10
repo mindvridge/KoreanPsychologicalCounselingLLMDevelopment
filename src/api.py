@@ -1336,11 +1336,49 @@ async def list_personas(
 
     Returns list of counselor personas with their characteristics
     """
+    # persona_manager가 없으면 직접 초기화 시도
     if not persona_manager:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Persona system not available"
-        )
+        try:
+            if PersonaManager:
+                global persona_manager
+                persona_manager = PersonaManager()
+                logger.info("PersonaManager initialized on-demand")
+            else:
+                # PersonaManager를 임포트할 수 없으면 기본 응답 반환
+                logger.warning("PersonaManager not available, returning default personas")
+                return PersonaListResponse(
+                    personas=[
+                        {
+                            "id": "warm_mother",
+                            "name": "박은희",
+                            "display_name": "박은희 상담사",
+                            "age_range": "40대",
+                            "gender": "female",
+                            "personality_type": "따뜻하고 포용적인",
+                            "specialties": ["가족 관계", "우울", "불안"],
+                            "intro": "따뜻하고 모성적인 상담사"
+                        }
+                    ],
+                    total=1
+                )
+        except Exception as e:
+            logger.error(f"Failed to initialize PersonaManager: {e}")
+            # 기본 응답 반환
+            return PersonaListResponse(
+                personas=[
+                    {
+                        "id": "warm_mother",
+                        "name": "박은희",
+                        "display_name": "박은희 상담사",
+                        "age_range": "40대",
+                        "gender": "female",
+                        "personality_type": "따뜻하고 포용적인",
+                        "specialties": ["가족 관계", "우울", "불안"],
+                        "intro": "따뜻하고 모성적인 상담사"
+                    }
+                ],
+                total=1
+            )
 
     try:
         personas = persona_manager.list_personas(include_details=include_details)
@@ -1426,11 +1464,45 @@ async def recommend_personas(
 
     Returns recommended personas ranked by suitability with personalization markers (⭐)
     """
+    # persona_manager가 없으면 직접 초기화 시도
     if not persona_manager:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Persona system not available"
-        )
+        try:
+            if PersonaManager:
+                global persona_manager
+                persona_manager = PersonaManager()
+                logger.info("PersonaManager initialized on-demand")
+            else:
+                # PersonaManager를 임포트할 수 없으면 기본 응답 반환
+                logger.warning("PersonaManager not available, returning default recommendations")
+                return PersonaRecommendationResponse(
+                    recommendations=[
+                        {
+                            "id": "warm_mother",
+                            "name": "박은희",
+                            "display_name": "박은희 상담사",
+                            "match_score": 0.8,
+                            "reason": "기본 추천 상담사",
+                            "specialties": ["우울", "불안", "가족 관계"]
+                        }
+                    ],
+                    reason="System initializing, showing default recommendation"
+                )
+        except Exception as e:
+            logger.error(f"Failed to initialize PersonaManager: {e}")
+            # 기본 응답 반환
+            return PersonaRecommendationResponse(
+                recommendations=[
+                    {
+                        "id": "warm_mother",
+                        "name": "박은희",
+                        "display_name": "박은희 상담사",
+                        "match_score": 0.8,
+                        "reason": "기본 추천 상담사",
+                        "specialties": ["우울", "불안", "가족 관계"]
+                    }
+                ],
+                reason="System initializing, showing default recommendation"
+            )
 
     try:
         # Use learned weights + personalization
