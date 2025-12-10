@@ -32,68 +32,25 @@
         <div id="home-screen" class="screen active">
             <div class="container">
                 <section class="hero">
-                    <h2>어떤 상담사와 이야기하고 싶으신가요?</h2>
-                    <p class="hero-subtitle">당신의 고민과 상황에 맞는 전문 상담사를 추천해드립니다</p>
+                    <h2>마음을 나누고 싶으신가요?</h2>
+                    <p class="hero-subtitle">AI 심리상담사가 당신의 이야기를 경청하겠습니다</p>
                 </section>
 
-                <!-- User Input Form -->
+                <!-- Start Chat Section -->
                 <section class="user-input-section">
-                    <div class="input-card">
-                        <div class="input-group">
-                            <label for="user-id-input">사용자 ID (개인화 추천을 위해)</label>
-                            <input type="text" id="user-id-input" placeholder="예: user_123 (선택사항)" />
-                            <small>※ 입력하시면 개인 맞춤 추천을 받을 수 있습니다</small>
-                        </div>
-
-                        <div class="input-group">
-                            <label for="age-range-select">연령대</label>
-                            <select id="age-range-select">
-                                <option value="">선택하세요</option>
-                                <option value="10대">10대</option>
-                                <option value="20대">20대</option>
-                                <option value="30대">30대</option>
-                                <option value="40대">40대</option>
-                                <option value="50대">50대 이상</option>
-                                <option value="60대">60대 이상</option>
-                            </select>
-                        </div>
-
-                        <div class="input-group">
-                            <label>주요 고민 (복수 선택 가능)</label>
-                            <div class="concerns-grid" id="concerns-grid">
-                                <button class="concern-tag" data-concern="우울">우울</button>
-                                <button class="concern-tag" data-concern="불안">불안</button>
-                                <button class="concern-tag" data-concern="스트레스">스트레스</button>
-                                <button class="concern-tag" data-concern="대인관계">대인관계</button>
-                                <button class="concern-tag" data-concern="가족">가족</button>
-                                <button class="concern-tag" data-concern="직장">직장</button>
-                                <button class="concern-tag" data-concern="학업">학업</button>
-                                <button class="concern-tag" data-concern="진로">진로</button>
-                                <button class="concern-tag" data-concern="연애">연애</button>
-                                <button class="concern-tag" data-concern="결혼">결혼</button>
-                                <button class="concern-tag" data-concern="트라우마">트라우마</button>
-                                <button class="concern-tag" data-concern="중독">중독</button>
-                                <button class="concern-tag" data-concern="분노">분노</button>
-                                <button class="concern-tag" data-concern="자존감">자존감</button>
-                                <button class="concern-tag" data-concern="수면">수면 문제</button>
-                            </div>
-                        </div>
-
-                        <button id="find-counselor-btn" class="btn-primary">상담사 추천받기</button>
+                    <div class="input-card" style="text-align: center;">
+                        <div class="start-chat-icon" style="font-size: 4rem; margin-bottom: 1.5rem;">🧠💬</div>
+                        <p style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.8;">
+                            언제든지 편하게 대화를 시작하세요.<br>
+                            당신의 감정과 고민을 함께 나누겠습니다.
+                        </p>
+                        <button id="start-chat-btn" class="btn-primary" style="font-size: 1.2rem; padding: 1rem 3rem;">
+                            상담 시작하기
+                        </button>
+                        <p style="margin-top: 1.5rem; font-size: 0.9rem; color: var(--text-secondary);">
+                            ※ 모든 대화는 안전하게 보호됩니다
+                        </p>
                     </div>
-                </section>
-
-                <!-- Recommended Counselors -->
-                <section id="recommendations-section" class="recommendations-section" style="display: none;">
-                    <h3>추천 상담사</h3>
-                    <div id="recommendations-container" class="counselors-grid"></div>
-                </section>
-
-                <!-- All Counselors -->
-                <section class="all-counselors-section">
-                    <h3>전체 상담사 보기</h3>
-                    <button id="load-all-counselors-btn" class="btn-secondary">전체 상담사 목록 불러오기</button>
-                    <div id="all-counselors-container" class="counselors-grid" style="display: none;"></div>
                 </section>
             </div>
         </div>
@@ -105,10 +62,10 @@
                 <div class="chat-header">
                     <button id="back-to-home-btn" class="btn-icon">← 돌아가기</button>
                     <div class="counselor-info">
-                        <div class="counselor-avatar" id="chat-counselor-avatar">👨‍⚕️</div>
+                        <div class="counselor-avatar">🧠</div>
                         <div>
-                            <h4 id="chat-counselor-name">상담사</h4>
-                            <p id="chat-counselor-specialty">전문 분야</p>
+                            <h4>마음챗 AI 상담</h4>
+                            <p>심리상담 서비스</p>
                         </div>
                     </div>
                     <div class="chat-mode-toggle">
@@ -203,9 +160,9 @@
                 <div class="voice-header">
                     <button id="voice-back-btn" class="btn-icon">← 돌아가기</button>
                     <div class="counselor-info">
-                        <div class="counselor-avatar" id="voice-counselor-avatar">👨‍⚕️</div>
+                        <div class="counselor-avatar">🧠</div>
                         <div>
-                            <h4 id="voice-counselor-name">상담사</h4>
+                            <h4>마음챗 AI 상담</h4>
                             <p id="voice-connection-status">연결 중...</p>
                         </div>
                     </div>
@@ -260,11 +217,6 @@
                     <p class="feedback-subtitle">상담이 어떠셨나요? 여러분의 피드백이 서비스 개선에 큰 도움이 됩니다.</p>
 
                     <form id="feedback-form">
-                        <div class="input-group">
-                            <label>상담사</label>
-                            <p id="feedback-counselor-name" class="feedback-value"></p>
-                        </div>
-
                         <div class="input-group">
                             <label>전반적인 만족도</label>
                             <div class="rating-stars" id="rating-stars">
@@ -327,16 +279,6 @@
                         <h4>피드백 제출</h4>
                         <p class="stat-value" id="total-feedback">0회</p>
                     </div>
-                    <div class="stat-card">
-                        <h4>선호 상담사</h4>
-                        <p class="stat-value" id="favorite-counselor">없음</p>
-                    </div>
-                </div>
-
-                <!-- User Preferences -->
-                <div class="preferences-section">
-                    <h3>나의 상담사 선호도</h3>
-                    <div id="user-preferences-container"></div>
                 </div>
 
                 <button id="back-to-home-from-dashboard-btn" class="btn-secondary">홈으로 돌아가기</button>

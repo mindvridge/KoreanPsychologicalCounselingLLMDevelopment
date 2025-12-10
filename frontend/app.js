@@ -10,11 +10,8 @@
 const AppState = {
     currentScreen: 'home',
     userId: null,
-    currentCounselor: null,
     currentSession: null,
-    chatHistory: [],
-    selectedConcerns: [],
-    allPersonas: []
+    chatHistory: []
 };
 
 // ============================================================================
@@ -56,44 +53,11 @@ class APIClient {
         }
     }
 
-    // Persona Endpoints
-    async getPersonaRecommendations(ageRange, concerns, userId = null, topK = 3) {
-        return this.request('/personas/recommend', {
-            method: 'POST',
-            body: JSON.stringify({
-                age_range: ageRange,
-                concerns: concerns,
-                user_id: userId,
-                top_k: topK
-            })
-        });
-    }
-
-    async getAllPersonas() {
-        return this.request('/personas/all', {
-            method: 'GET'
-        });
-    }
-
-    async getPersonaById(personaId) {
-        return this.request(`/personas/${personaId}`, {
-            method: 'GET'
-        });
-    }
-
-    async searchPersonas(query, filters = {}) {
-        return this.request('/personas/search', {
-            method: 'POST',
-            body: JSON.stringify({ query, filters })
-        });
-    }
-
     // Chat Endpoints
-    async sendChatMessage(personaId, message, sessionId, userId = null) {
+    async sendChatMessage(message, sessionId, userId = null) {
         return this.request('/chat', {
             method: 'POST',
             body: JSON.stringify({
-                persona_id: personaId,
                 message: message,
                 session_id: sessionId,
                 user_id: userId
@@ -102,34 +66,16 @@ class APIClient {
     }
 
     // Feedback Endpoints
-    async submitFeedback(personaId, feedbackData) {
-        return this.request(`/personas/${personaId}/feedback`, {
+    async submitFeedback(feedbackData) {
+        return this.request('/feedback', {
             method: 'POST',
             body: JSON.stringify(feedbackData)
         });
     }
 
-    async getPersonaPerformance(personaId) {
-        return this.request(`/personas/${personaId}/performance`, {
-            method: 'GET'
-        });
-    }
-
-    async getAllPersonasAnalytics() {
-        return this.request('/personas/analytics/all', {
-            method: 'GET'
-        });
-    }
-
-    // User Personalization Endpoints
-    async getUserPreferences(userId) {
-        return this.request(`/users/${userId}/preferences`, {
-            method: 'GET'
-        });
-    }
-
+    // User Endpoints
     async getUserStats(userId) {
-        return this.request(`/users/${userId}/stats`, {
+        return this.request(`/user/${userId}/stats`, {
             method: 'GET'
         });
     }
@@ -169,10 +115,6 @@ const UI = {
         }, duration);
     },
 
-    getAvatar(personaId) {
-        return CONFIG.AVATARS[personaId] || CONFIG.DEFAULT_AVATAR;
-    },
-
     formatTime(date = new Date()) {
         return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
     }
@@ -183,165 +125,23 @@ const UI = {
 // ============================================================================
 
 function initializeHomeScreen() {
-    // Load user ID from storage
-    const savedUserId = StorageHelper.get(CONFIG.STORAGE_KEYS.USER_ID);
-    if (savedUserId) {
-        document.getElementById('user-id-input').value = savedUserId;
-        AppState.userId = savedUserId;
-    }
-
-    // Concern tags selection
-    document.querySelectorAll('.concern-tag').forEach(tag => {
-        tag.addEventListener('click', function() {
-            this.classList.toggle('selected');
-            const concern = this.dataset.concern;
-
-            if (this.classList.contains('selected')) {
-                if (!AppState.selectedConcerns.includes(concern)) {
-                    AppState.selectedConcerns.push(concern);
-                }
-            } else {
-                AppState.selectedConcerns = AppState.selectedConcerns.filter(c => c !== concern);
-            }
-        });
-    });
-
-    // Find counselor button
-    document.getElementById('find-counselor-btn').addEventListener('click', async function() {
-        const ageRange = document.getElementById('age-range-select').value;
-        const userIdInput = document.getElementById('user-id-input').value.trim();
-
-        if (!ageRange && AppState.selectedConcerns.length === 0) {
-            UI.showToast('연령대 또는 고민을 선택해주세요');
-            return;
-        }
-
-        // Save user ID
-        if (userIdInput) {
-            AppState.userId = userIdInput;
-            StorageHelper.set(CONFIG.STORAGE_KEYS.USER_ID, userIdInput);
-        }
-
-        UI.showLoading();
-
-        try {
-            const result = await api.getPersonaRecommendations(
-                ageRange || null,
-                AppState.selectedConcerns.length > 0 ? AppState.selectedConcerns : null,
-                AppState.userId,
-                CONFIG.DEFAULT_TOP_K
-            );
-
-            displayRecommendations(result.recommendations);
-            document.getElementById('recommendations-section').style.display = 'block';
-
-            // Scroll to recommendations
-            document.getElementById('recommendations-section').scrollIntoView({
-                behavior: 'smooth',
-                block: 'start'
-            });
-
-            UI.showToast('추천 상담사를 찾았습니다!');
-        } catch (error) {
-            console.error('Error getting recommendations:', error);
-            UI.showToast('추천을 가져오는 중 오류가 발생했습니다');
-        } finally {
-            UI.hideLoading();
-        }
-    });
-
-    // Load all counselors button
-    document.getElementById('load-all-counselors-btn').addEventListener('click', async function() {
-        UI.showLoading();
-
-        try {
-            const result = await api.getAllPersonas();
-            AppState.allPersonas = result.personas;
-            displayAllCounselors(result.personas);
-
-            document.getElementById('all-counselors-container').style.display = 'grid';
-            this.style.display = 'none';
-
-            UI.showToast(`전체 ${result.total}명의 상담사를 불러왔습니다`);
-        } catch (error) {
-            console.error('Error loading all counselors:', error);
-            UI.showToast('상담사 목록을 가져오는 중 오류가 발생했습니다');
-        } finally {
-            UI.hideLoading();
-        }
+    // Start chat button
+    document.getElementById('start-chat-btn').addEventListener('click', function() {
+        startChat();
     });
 }
 
-function displayRecommendations(recommendations) {
-    const container = document.getElementById('recommendations-container');
-    container.innerHTML = '';
-
-    recommendations.forEach(rec => {
-        const card = createCounselorCard(rec, true);
-        container.appendChild(card);
-    });
-}
-
-function displayAllCounselors(personas) {
-    const container = document.getElementById('all-counselors-container');
-    container.innerHTML = '';
-
-    personas.forEach(persona => {
-        const card = createCounselorCard(persona, false);
-        container.appendChild(card);
-    });
-}
-
-function createCounselorCard(data, isRecommendation = false) {
-    const card = document.createElement('div');
-    card.className = 'counselor-card';
-    if (data.personalized) {
-        card.classList.add('personalized');
-    }
-
-    const avatar = UI.getAvatar(data.id);
-    const genderMap = { 'male': '남성', 'female': '여성' };
-    const gender = genderMap[data.gender] || data.gender;
-
-    card.innerHTML = `
-        <div class="counselor-header">
-            <div class="counselor-avatar">${avatar}</div>
-            <div>
-                <div class="counselor-name">${data.display_name || data.name}</div>
-                <div class="counselor-title">${gender} · ${data.age_range}</div>
-                ${data.personalized ? '<div class="personalized-badge">⭐ 회원님 선호</div>' : ''}
-            </div>
-        </div>
-        <div class="counselor-details">
-            <p><strong>성격:</strong> ${data.personality?.type || '상담 전문가'}</p>
-            <p><strong>전문 분야:</strong> ${data.specialties?.join(', ') || '심리상담'}</p>
-            ${isRecommendation && data.score ? `<div><span class="counselor-score">매칭도: ${data.score.toFixed(1)}</span></div>` : ''}
-        </div>
-        ${data.reason ? `<div class="counselor-reason">${data.reason}</div>` : ''}
-    `;
-
-    card.addEventListener('click', () => {
-        selectCounselor(data);
-    });
-
-    return card;
-}
-
-function selectCounselor(counselor) {
-    AppState.currentCounselor = counselor;
-    StorageHelper.set(CONFIG.STORAGE_KEYS.SELECTED_COUNSELOR, counselor);
-
+function startChat() {
     // Generate session ID
     AppState.currentSession = {
         id: generateSessionId(),
-        personaId: counselor.id,
         startTime: new Date().toISOString(),
         messageCount: 0
     };
     StorageHelper.set(CONFIG.STORAGE_KEYS.CURRENT_SESSION, AppState.currentSession);
 
     // Initialize chat
-    initializeChatScreen(counselor);
+    initializeChatScreen();
     UI.showScreen('chat');
 }
 
@@ -349,26 +149,19 @@ function selectCounselor(counselor) {
 // Chat Screen Logic
 // ============================================================================
 
-function initializeChatScreen(counselor) {
-    const avatar = UI.getAvatar(counselor.id);
-
-    document.getElementById('chat-counselor-avatar').textContent = avatar;
-    document.getElementById('chat-counselor-name').textContent = counselor.display_name || counselor.name;
-    document.getElementById('chat-counselor-specialty').textContent =
-        counselor.specialties?.slice(0, 3).join(', ') || '심리상담 전문가';
-
+function initializeChatScreen() {
     // Clear chat history
     AppState.chatHistory = [];
     const messagesContainer = document.getElementById('chat-messages');
     messagesContainer.innerHTML = `
         <div class="welcome-message">
-            <p>${counselor.display_name || counselor.name} 상담사와의 대화가 시작됩니다.</p>
+            <p>AI 심리상담사와의 대화가 시작됩니다.</p>
             <p>편안하게 이야기 나눠보세요. 🌸</p>
         </div>
     `;
 
     // Send initial greeting
-    addBotMessage(`안녕하세요, ${counselor.display_name || counselor.name}입니다. 무엇을 도와드릴까요?`);
+    addBotMessage('안녕하세요, 마음챗입니다. 오늘 어떤 이야기를 나누고 싶으신가요? 편하게 말씀해주세요.');
 
     // Setup event listeners
     setupChatEventListeners();
@@ -403,7 +196,6 @@ function setupChatEventListeners() {
         UI.showLoading();
         try {
             const response = await api.sendChatMessage(
-                AppState.currentCounselor.id,
                 message,
                 AppState.currentSession.id,
                 AppState.userId
@@ -412,7 +204,7 @@ function setupChatEventListeners() {
             addBotMessage(response.response);
 
             // Handle safety checks
-            if (response.safety_check?.risk_level === 'HIGH' || response.safety_check?.risk_level === 'CRITICAL') {
+            if (response.crisis_detected) {
                 addSystemMessage('⚠️ 위기 상황이 감지되었습니다. 전문가의 즉각적인 도움이 필요할 수 있습니다.');
                 addSystemMessage('자살예방상담전화: ☎️ 1393 | 정신건강위기상담: ☎️ 1577-0199');
             }
@@ -474,11 +266,10 @@ function addUserMessage(text) {
 
 function addBotMessage(text) {
     const messagesContainer = document.getElementById('chat-messages');
-    const avatar = UI.getAvatar(AppState.currentCounselor?.id);
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message bot';
     messageDiv.innerHTML = `
-        <div class="message-avatar">${avatar}</div>
+        <div class="message-avatar">🧠</div>
         <div class="message-content">
             <div>${text}</div>
             <div class="message-time">${UI.formatTime()}</div>
@@ -511,10 +302,6 @@ function scrollToBottom() {
 // ============================================================================
 
 function initializeFeedbackScreen() {
-    const counselor = AppState.currentCounselor;
-    document.getElementById('feedback-counselor-name').textContent =
-        counselor.display_name || counselor.name;
-
     // Reset form
     document.getElementById('rating-value').value = '0';
     document.querySelectorAll('.star').forEach(star => star.classList.remove('active'));
@@ -597,21 +384,16 @@ async function submitFeedback() {
     }
 
     const feedbackData = {
-        user_id: AppState.userId || 'anonymous',
         session_id: AppState.currentSession.id,
         rating: rating,
-        helpful: document.getElementById('helpful-check').checked,
-        appropriate: document.getElementById('appropriate-check').checked,
-        would_recommend_again: document.getElementById('recommend-check').checked,
-        concerns_addressed: AppState.selectedConcerns,
-        feedback_text: document.getElementById('feedback-text').value.trim() || null,
-        user_age_range: document.getElementById('age-range-select').value || null
+        feedback_type: document.getElementById('helpful-check').checked ? 'helpful' : 'not_helpful',
+        feedback_text: document.getElementById('feedback-text').value.trim() || null
     };
 
     UI.showLoading();
 
     try {
-        await api.submitFeedback(AppState.currentCounselor.id, feedbackData);
+        await api.submitFeedback(feedbackData);
         UI.showToast('피드백이 제출되었습니다. 감사합니다! 🙏');
 
         // Clear session
@@ -634,7 +416,7 @@ async function submitFeedback() {
 
 async function loadDashboard() {
     if (!AppState.userId) {
-        UI.showToast('사용자 ID를 입력해주세요');
+        UI.showToast('사용자 ID가 필요합니다');
         return;
     }
 
@@ -642,13 +424,8 @@ async function loadDashboard() {
     UI.showScreen('dashboard');
 
     try {
-        const [stats, preferences] = await Promise.all([
-            api.getUserStats(AppState.userId),
-            api.getUserPreferences(AppState.userId)
-        ]);
-
+        const stats = await api.getUserStats(AppState.userId);
         displayUserStats(stats);
-        displayUserPreferences(preferences);
     } catch (error) {
         console.error('Error loading dashboard:', error);
         UI.showToast('대시보드 로드 중 오류가 발생했습니다');
@@ -669,43 +446,6 @@ async function loadDashboard() {
 function displayUserStats(stats) {
     document.getElementById('total-sessions').textContent = `${stats.total_sessions || 0}회`;
     document.getElementById('total-feedback').textContent = `${stats.total_feedback || 0}회`;
-    document.getElementById('favorite-counselor').textContent =
-        stats.favorite_persona?.display_name || '없음';
-}
-
-function displayUserPreferences(preferences) {
-    const container = document.getElementById('user-preferences-container');
-    container.innerHTML = '';
-
-    if (!preferences || preferences.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-secondary);">아직 선호도 데이터가 없습니다. 더 많은 상담을 이용해주세요.</p>';
-        return;
-    }
-
-    preferences.forEach(pref => {
-        const item = document.createElement('div');
-        item.className = 'preference-item';
-
-        const normalizedScore = ((pref.preference_score + 1) / 2) * 100; // -1~1 → 0~100
-        const scoreColor = pref.preference_score > 0 ? 'var(--secondary-color)' : 'var(--danger-color)';
-
-        item.innerHTML = `
-            <div style="flex: 1;">
-                <div class="preference-name">${pref.persona_name}</div>
-                <div class="preference-score">
-                    선호도: ${pref.preference_score.toFixed(2)} |
-                    평균 평점: ${pref.average_rating.toFixed(1)} |
-                    피드백: ${pref.feedback_count}회
-                </div>
-                <div class="preference-bar">
-                    <div class="preference-bar-fill"
-                         style="width: ${normalizedScore}%; background: ${scoreColor};">
-                    </div>
-                </div>
-            </div>
-        `;
-        container.appendChild(item);
-    });
 }
 
 // ============================================================================
@@ -771,7 +511,6 @@ function showConsentModal() {
     // Disagree button
     document.getElementById('consent-disagree-btn').addEventListener('click', () => {
         alert('서비스 이용약관에 동의하지 않으면 서비스를 이용할 수 없습니다.');
-        // Optionally redirect or close
     });
 
     // Agree button
@@ -837,23 +576,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // User menu button (for future dashboard access)
     document.getElementById('user-menu-btn').addEventListener('click', () => {
-        if (AppState.userId) {
-            loadDashboard();
-        } else {
-            UI.showToast('먼저 사용자 ID를 입력해주세요');
-        }
+        UI.showToast('대시보드 기능은 준비 중입니다');
     });
-
-    // Update user name display
-    const updateUserDisplay = () => {
-        const userName = AppState.userId || '사용자';
-        document.getElementById('user-name').textContent = userName;
-    };
-
-    // Watch for user ID changes
-    const userIdInput = document.getElementById('user-id-input');
-    userIdInput.addEventListener('blur', updateUserDisplay);
-    updateUserDisplay();
 
     console.log('✅ Application initialized successfully');
 });
