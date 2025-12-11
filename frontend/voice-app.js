@@ -18,10 +18,11 @@ class VoiceApp {
         this.isFullScreen = false;
         this.isInitialized = false;
         this.isMuted = false;
+        this.eventListenersSetup = false;
 
         // Session info
         this.sessionId = null;
-        this.counselorId = null;
+        this.counselorId = 'default';  // 기본 상담사 ID
 
         // Bind methods
         this.handleStateChange = this.handleStateChange.bind(this);
@@ -35,9 +36,9 @@ class VoiceApp {
     // Initialization
     // =========================================================================
 
-    async initialize(sessionId, counselorId) {
+    async initialize(sessionId, counselorId = 'default') {
         this.sessionId = sessionId;
-        this.counselorId = counselorId;
+        this.counselorId = counselorId || 'default';
 
         try {
             // Initialize VoiceChat
@@ -60,11 +61,11 @@ class VoiceApp {
                 onEnd: () => this.setCounselorSpeaking(false)
             });
 
-            // Setup event listeners
-            this.setupEventListeners();
+            // Setup additional event listeners (record buttons, etc.)
+            this.setupRecordEventListeners();
 
             // Connect to voice service
-            const success = await this.voiceChat.initialize(sessionId, counselorId);
+            const success = await this.voiceChat.initialize(sessionId, this.counselorId);
 
             if (success) {
                 this.isInitialized = true;
@@ -117,7 +118,10 @@ class VoiceApp {
         }
     }
 
-    setupEventListeners() {
+    // 모드 전환 버튼 리스너 (DOMContentLoaded에서 호출)
+    setupModeToggleListeners() {
+        if (this.eventListenersSetup) return;
+
         // Mode toggle buttons
         const textModeBtn = document.getElementById('text-mode-btn');
         const voiceModeBtn = document.getElementById('voice-mode-btn');
@@ -128,34 +132,6 @@ class VoiceApp {
 
         if (voiceModeBtn) {
             voiceModeBtn.addEventListener('click', () => this.switchToVoiceMode());
-        }
-
-        // Record buttons
-        const recordBtn = document.getElementById('voice-record-btn');
-        const fullRecordBtn = document.getElementById('full-record-btn');
-
-        if (recordBtn) {
-            recordBtn.addEventListener('click', () => this.toggleRecording());
-        }
-
-        if (fullRecordBtn) {
-            fullRecordBtn.addEventListener('click', () => this.toggleRecording());
-        }
-
-        // Visualizer type selector
-        const visualizerSelect = document.getElementById('visualizer-type');
-        if (visualizerSelect) {
-            visualizerSelect.addEventListener('change', (e) => {
-                if (this.visualizer) {
-                    this.visualizer.setType(e.target.value);
-                }
-            });
-        }
-
-        // Mute button
-        const muteBtn = document.getElementById('mute-btn');
-        if (muteBtn) {
-            muteBtn.addEventListener('click', () => this.toggleMute());
         }
 
         // Switch to text from full screen
@@ -188,6 +164,39 @@ class VoiceApp {
             });
         }
 
+        this.eventListenersSetup = true;
+    }
+
+    // 녹음 관련 이벤트 리스너 (initialize에서 호출)
+    setupRecordEventListeners() {
+        // Record buttons
+        const recordBtn = document.getElementById('voice-record-btn');
+        const fullRecordBtn = document.getElementById('full-record-btn');
+
+        if (recordBtn) {
+            recordBtn.addEventListener('click', () => this.toggleRecording());
+        }
+
+        if (fullRecordBtn) {
+            fullRecordBtn.addEventListener('click', () => this.toggleRecording());
+        }
+
+        // Visualizer type selector
+        const visualizerSelect = document.getElementById('visualizer-type');
+        if (visualizerSelect) {
+            visualizerSelect.addEventListener('change', (e) => {
+                if (this.visualizer) {
+                    this.visualizer.setType(e.target.value);
+                }
+            });
+        }
+
+        // Mute button
+        const muteBtn = document.getElementById('mute-btn');
+        if (muteBtn) {
+            muteBtn.addEventListener('click', () => this.toggleMute());
+        }
+
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (this.isVoiceMode && e.code === 'Space' && !e.target.matches('input, textarea')) {
@@ -215,8 +224,13 @@ class VoiceApp {
 
         this.isVoiceMode = true;
 
-        // Initialize if needed
-        if (!this.isInitialized && this.sessionId && this.counselorId) {
+        // 세션 ID가 없으면 AppState에서 가져오기
+        if (!this.sessionId && typeof AppState !== 'undefined' && AppState.currentSession) {
+            this.sessionId = AppState.currentSession.id;
+        }
+
+        // Initialize if needed (counselorId 없이도 동작)
+        if (!this.isInitialized && this.sessionId) {
             await this.initialize(this.sessionId, this.counselorId);
         }
 
@@ -255,19 +269,19 @@ class VoiceApp {
     switchToFullScreen() {
         this.isFullScreen = true;
 
-        // Update counselor info
+        // Update counselor info (기본 AI 상담사 표시)
         const avatar = document.getElementById('voice-counselor-avatar');
         const name = document.getElementById('voice-counselor-name');
         const speakingAvatar = document.getElementById('speaking-avatar');
 
-        if (avatar && AppState.currentCounselor) {
-            avatar.textContent = UI.getAvatar(AppState.currentCounselor.id);
+        if (avatar) {
+            avatar.textContent = '🤖';
         }
-        if (name && AppState.currentCounselor) {
-            name.textContent = AppState.currentCounselor.display_name || AppState.currentCounselor.name;
+        if (name) {
+            name.textContent = '마음챗 AI 상담';
         }
-        if (speakingAvatar && AppState.currentCounselor) {
-            speakingAvatar.textContent = UI.getAvatar(AppState.currentCounselor.id);
+        if (speakingAvatar) {
+            speakingAvatar.textContent = '🤖';
         }
 
         // Start full visualizer
@@ -504,9 +518,9 @@ class VoiceApp {
     // Public API
     // =========================================================================
 
-    setSession(sessionId, counselorId) {
+    setSession(sessionId, counselorId = 'default') {
         this.sessionId = sessionId;
-        this.counselorId = counselorId;
+        this.counselorId = counselorId || 'default';
     }
 
     isReady() {
@@ -523,20 +537,20 @@ const voiceApp = new VoiceApp();
 // Integration with main app
 window.voiceApp = voiceApp;
 
-// Auto-initialize when entering chat with a counselor
+// Auto-initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+    // 모드 전환 버튼 리스너 설정 (초기화 없이도 동작)
+    voiceApp.setupModeToggleListeners();
+
     // Watch for chat screen activation
     const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
             if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
                 const chatScreen = document.getElementById('chat-screen');
                 if (chatScreen && chatScreen.classList.contains('active')) {
-                    // Chat screen is now active
-                    if (typeof AppState !== 'undefined' && AppState.currentSession && AppState.currentCounselor) {
-                        voiceApp.setSession(
-                            AppState.currentSession.id,
-                            AppState.currentCounselor.id
-                        );
+                    // Chat screen is now active - 세션 ID만 설정
+                    if (typeof AppState !== 'undefined' && AppState.currentSession) {
+                        voiceApp.setSession(AppState.currentSession.id);
                     }
                 }
             }
