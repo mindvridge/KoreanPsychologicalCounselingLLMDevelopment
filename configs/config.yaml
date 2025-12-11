@@ -124,12 +124,12 @@ finetuning:
 # 음성 상담 설정 (Voice Counseling)
 # =================================
 
-# STT (Speech-to-Text) 설정
+# STT (Speech-to-Text) 설정 - RTX 5060 Ti 최적화
 stt:
   enabled: true
-  model: "large-v3"  # whisper 모델 (tiny, base, small, medium, large-v3)
+  model: "medium"  # RTX 5060 Ti용 (tiny, base, small, medium, large-v3)
   device: "cuda"
-  compute_type: "float16"  # A100: float16, 저사양: int8
+  compute_type: "float16"  # RTX 5060 Ti: float16 지원
   language: "ko"
   use_faster_whisper: true  # faster-whisper 사용 (더 빠름)
   vad:
