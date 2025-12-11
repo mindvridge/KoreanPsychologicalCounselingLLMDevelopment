@@ -1,5 +1,5 @@
 """
-강화된 프롬프트 템플릿 모듈 (Enhanced v3 - MIND-SAFE Framework)
+강화된 프롬프트 템플릿 모듈 (Enhanced v4 - MIND-SAFE Framework + Advanced Counseling)
 Enhanced Prompt Templates Module
 
 JMIR Mental Health 2025 연구 기반:
@@ -8,6 +8,11 @@ JMIR Mental Health 2025 연구 기반:
 - 범위 제한 및 윤리 필터
 - 동적 치료 기법 선택
 - 프롬프트 평가 시스템
+
+v4 추가:
+- 치료적 동맹 (Therapeutic Alliance) 모니터링
+- 동기강화 면담 (Motivational Interviewing) 통합
+- 변화 단계 모델 (Stages of Change) 적용
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -17,6 +22,21 @@ import re
 import logging
 
 logger = logging.getLogger(__name__)
+
+# 고급 상담 시스템 (지연 임포트로 순환 참조 방지)
+_advanced_counseling_system = None
+
+def _get_advanced_system():
+    """고급 상담 시스템 지연 로딩"""
+    global _advanced_counseling_system
+    if _advanced_counseling_system is None:
+        try:
+            from src.advanced_counseling import get_advanced_counseling_system
+            _advanced_counseling_system = get_advanced_counseling_system()
+        except ImportError:
+            logger.warning("Advanced counseling system not available")
+            return None
+    return _advanced_counseling_system
 
 
 # =============================================================================
@@ -965,6 +985,103 @@ AI로서 한계가 있을 때:
         }
 
         return responses.get(crisis_type, responses["suicide"])
+
+    def get_advanced_counseling_context(
+        self,
+        current_message: str,
+        conversation_history: List[Dict]
+    ) -> str:
+        """
+        고급 상담 컨텍스트 생성
+
+        치료적 동맹, MI, 변화 단계 분석 결과를 프롬프트에 추가
+
+        Args:
+            current_message: 현재 사용자 메시지
+            conversation_history: 대화 기록
+
+        Returns:
+            고급 상담 지침 문자열
+        """
+        advanced_system = _get_advanced_system()
+        if not advanced_system:
+            return ""
+
+        try:
+            analysis = advanced_system.analyze_and_enhance(
+                current_message,
+                conversation_history
+            )
+
+            context_parts = ["\n# 고급 상담 분석 결과\n"]
+
+            # 치료적 동맹 상태
+            alliance = analysis["alliance"]
+            context_parts.append(f"## 치료적 동맹 (점수: {alliance['overall_score']:.1%})")
+
+            if alliance["rupture_detected"]:
+                context_parts.append(f"⚠️ **동맹 파열 감지**: {alliance['rupture_type']}")
+                context_parts.append("→ 관계 회복이 최우선입니다. 내용보다 관계에 집중하세요.")
+            elif alliance["overall_score"] < 0.6:
+                context_parts.append("⚡ 동맹 약화 징후 - 공감과 수용 강화 필요")
+
+            # 변화 단계
+            stage = analysis["stage"]
+            context_parts.append(f"\n## 변화 단계: {stage['current_stage'].upper()}")
+            context_parts.append(f"목표: {stage['recommended_approach']}")
+
+            # MI 분석
+            mi = analysis["mi"]
+            if mi["change_talk_count"] > 0:
+                context_parts.append(f"\n## 변화 대화 감지: {', '.join(mi['change_talk_types'])}")
+                context_parts.append("→ 이 변화 대화를 반영하고 강화하세요")
+
+            if mi["has_sustain_talk"]:
+                context_parts.append("\n## 유지 대화 (저항) 감지")
+                context_parts.append("→ 저항에 직면하지 말고 굴러가세요 (Roll with resistance)")
+
+            # 통합 지침
+            context_parts.append("\n---")
+            context_parts.append(analysis["integrated_prompt"][:1000])  # 길이 제한
+
+            return "\n".join(context_parts)
+
+        except Exception as e:
+            logger.error(f"Error in advanced counseling analysis: {e}")
+            return ""
+
+    def get_enhanced_system_prompt_v4(
+        self,
+        context: Optional[Dict] = None,
+        current_message: str = "",
+        conversation_history: Optional[List[Dict]] = None
+    ) -> str:
+        """
+        v4 강화된 시스템 프롬프트 생성
+
+        기존 시스템 프롬프트 + 고급 상담 분석 결과 통합
+
+        Args:
+            context: 기본 컨텍스트
+            current_message: 현재 사용자 메시지
+            conversation_history: 대화 기록
+
+        Returns:
+            통합된 시스템 프롬프트
+        """
+        # 기본 시스템 프롬프트
+        base_prompt = self.get_system_prompt(context)
+
+        # 고급 상담 컨텍스트 추가
+        if current_message and conversation_history:
+            advanced_context = self.get_advanced_counseling_context(
+                current_message,
+                conversation_history
+            )
+            if advanced_context:
+                base_prompt += "\n" + advanced_context
+
+        return base_prompt
 
 
 # =============================================================================
