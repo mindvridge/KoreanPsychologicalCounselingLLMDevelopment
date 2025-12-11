@@ -7,7 +7,7 @@ model:
   # provider: "openai" (OpenAI API 사용)
   # provider: "mock" (테스트용 Mock LLM)
   provider: "openai"  # ChatGPT API 사용
-  name: "gpt-4o-mini"  # OpenAI 모델명
+  name: "gpt-5.1"  # OpenAI 최신 플래그십 모델
   quantization: "4bit"
   max_memory: "40GB"
   device_map: "auto"
