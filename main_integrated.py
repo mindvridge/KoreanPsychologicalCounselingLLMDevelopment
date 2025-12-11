@@ -3,6 +3,7 @@ Integrated Korean Mental Health Counseling System
 Combines all components into a production-ready system
 """
 
+import os
 import sys
 import logging
 from typing import Dict, Optional, List, Any
@@ -10,6 +11,10 @@ from pathlib import Path
 import yaml
 import torch
 from datetime import datetime
+
+# .env 파일 로드 (환경 변수 설정)
+from dotenv import load_dotenv
+load_dotenv()  # 프로젝트 루트의 .env 파일 로드
 
 # Import all system components
 from src.main import KoreanMentalHealthLLM
@@ -233,7 +238,17 @@ class IntegratedMentalHealthSystem:
                 # OpenAI API 사용
                 logger.info("   Using OpenAI API provider")
                 from src.openai_adapter import OpenAICounselor, OpenAIConfig
-                import os
+                
+                # .env 파일을 다시 로드하여 환경 변수 확인
+                # (Uvicorn reload 모드에서 환경 변수가 손실될 수 있음)
+                from dotenv import load_dotenv
+                env_path = Path(__file__).parent / ".env"
+                if env_path.exists():
+                    load_dotenv(env_path, override=True)
+                    logger.info(f"   Loaded .env file from {env_path}")
+                else:
+                    # 프로젝트 루트에서 찾기
+                    load_dotenv(override=True)
                 
                 # API 키 확인
                 api_key = os.getenv("OPENAI_API_KEY")

@@ -17,6 +17,11 @@ import subprocess
 import threading
 from pathlib import Path
 
+# Windows 인코딩 문제 해결
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 # 프로젝트 루트 설정
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))

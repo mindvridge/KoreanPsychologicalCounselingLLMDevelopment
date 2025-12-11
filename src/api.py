@@ -11,6 +11,10 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
+# .env 파일 로드 (가장 먼저 실행)
+from dotenv import load_dotenv
+load_dotenv()  # 프로젝트 루트의 .env 파일 로드
+
 from fastapi import FastAPI, HTTPException, Depends, Header, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse

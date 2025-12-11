@@ -24,12 +24,15 @@ logger = logging.getLogger(__name__)
 class OpenAIConfig:
     """OpenAI API 설정"""
     api_key: Optional[str] = None
-    model: str = "gpt-4o-mini"  # gpt-4o, gpt-4o-mini, gpt-4-turbo
+    model: str = "gpt-4o-mini"  # gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-5.1
     temperature: float = 0.7
     max_tokens: int = 500
     top_p: float = 0.9
     frequency_penalty: float = 0.0
     presence_penalty: float = 0.0
+    
+    # GPT-5.1 전용 설정
+    reasoning_effort: str = "medium"  # low, medium, high (GPT-5.1용)
 
     # 비용 추적
     track_cost: bool = True
@@ -39,7 +42,9 @@ class OpenAIConfig:
         "gpt-4o": {"input": 0.005, "output": 0.015},
         "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
         "gpt-4-turbo": {"input": 0.01, "output": 0.03},
-        "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015}
+        "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},
+        "gpt-5.1": {"input": 0.003, "output": 0.012},  # GPT-5.1 가격 (추정)
+        "gpt-5.1-codex": {"input": 0.005, "output": 0.015}
     })
 
 
@@ -129,6 +134,7 @@ class OpenAICounselor(LLMInterface):
     OpenAI API 기반 상담사
 
     로컬 LLM과 동일한 인터페이스 제공
+    GPT-5.1 Responses API 지원
     """
 
     def __init__(self, config: Optional[OpenAIConfig] = None):
@@ -142,6 +148,9 @@ class OpenAICounselor(LLMInterface):
         self.async_client = None
         self.stats = UsageStats()
         self.system_prompt = COUNSELOR_SYSTEM_PROMPT
+        
+        # GPT-5.1 모델 여부 확인
+        self.use_responses_api = self.config.model.startswith("gpt-5")
 
         self._initialize_client()
         logger.info(f"OpenAICounselor initialized with model={self.config.model}")
@@ -172,9 +181,13 @@ class OpenAICounselor(LLMInterface):
         Returns:
             상담사 응답
         """
-        messages = self._build_messages(user_message, conversation_history)
-
         try:
+            # GPT-5.1: Responses API 사용
+            if self.use_responses_api:
+                return self._generate_with_responses_api(user_message, conversation_history)
+            
+            # 기존 모델: Chat Completions API 사용
+            messages = self._build_messages(user_message, conversation_history)
             response = self.client.chat.completions.create(
                 model=self.config.model,
                 messages=messages,
@@ -199,6 +212,72 @@ class OpenAICounselor(LLMInterface):
         except Exception as e:
             logger.error(f"OpenAI API error: {e}")
             return "죄송합니다. 일시적인 오류가 발생했습니다. 잠시 후 다시 말씀해 주세요."
+    
+    def _generate_with_responses_api(
+        self,
+        user_message: str,
+        conversation_history: List[Dict[str, str]] = None
+    ) -> str:
+        """
+        GPT-5.1 Responses API를 사용한 응답 생성
+        
+        Args:
+            user_message: 사용자 메시지
+            conversation_history: 대화 기록
+            
+        Returns:
+            상담사 응답
+        """
+        # 대화 컨텍스트 구성
+        context_parts = [f"[시스템 지침]\n{self.system_prompt}\n"]
+        
+        if conversation_history:
+            context_parts.append("\n[이전 대화]\n")
+            for msg in conversation_history[-10:]:
+                role = "내담자" if msg.get("role") == "user" else "상담사"
+                context_parts.append(f"{role}: {msg.get('content', '')}\n")
+        
+        # 현재 메시지와 함께 입력 구성
+        full_input = "".join(context_parts) + f"\n[현재 메시지]\n내담자: {user_message}\n\n상담사로서 따뜻하고 공감적인 응답을 해주세요:"
+        
+        try:
+            # GPT-5.1 Responses API 호출
+            response = self.client.responses.create(
+                model=self.config.model,
+                input=full_input,
+                reasoning={"effort": self.config.reasoning_effort},
+            )
+            
+            # 토큰 사용량 추적
+            if self.config.track_cost and hasattr(response, 'usage') and response.usage:
+                input_tokens = getattr(response.usage, 'input_tokens', 0)
+                output_tokens = getattr(response.usage, 'output_tokens', 0)
+                self.stats.update(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    model=self.config.model,
+                    pricing=self.config.pricing
+                )
+            
+            # 응답 텍스트 추출
+            output_text = getattr(response, 'output_text', None)
+            if output_text:
+                return output_text.strip()
+            
+            # output_text가 없으면 output에서 추출 시도
+            if hasattr(response, 'output') and response.output:
+                for item in response.output:
+                    if hasattr(item, 'content') and item.content:
+                        for content in item.content:
+                            if hasattr(content, 'text'):
+                                return content.text.strip()
+            
+            logger.warning("GPT-5.1 응답에서 텍스트를 추출할 수 없습니다")
+            return "죄송합니다. 응답을 처리하는 중 문제가 발생했습니다."
+            
+        except Exception as e:
+            logger.error(f"GPT-5.1 Responses API error: {e}")
+            raise
 
     async def generate_response_async(
         self,
@@ -206,9 +285,13 @@ class OpenAICounselor(LLMInterface):
         conversation_history: List[Dict[str, str]] = None
     ) -> str:
         """응답 생성 (비동기)"""
-        messages = self._build_messages(user_message, conversation_history)
-
         try:
+            # GPT-5.1: Responses API 사용 (비동기)
+            if self.use_responses_api:
+                return await self._generate_with_responses_api_async(user_message, conversation_history)
+            
+            # 기존 모델: Chat Completions API 사용
+            messages = self._build_messages(user_message, conversation_history)
             response = await self.async_client.chat.completions.create(
                 model=self.config.model,
                 messages=messages,
@@ -230,6 +313,63 @@ class OpenAICounselor(LLMInterface):
         except Exception as e:
             logger.error(f"OpenAI API error: {e}")
             return "죄송합니다. 일시적인 오류가 발생했습니다. 잠시 후 다시 말씀해 주세요."
+    
+    async def _generate_with_responses_api_async(
+        self,
+        user_message: str,
+        conversation_history: List[Dict[str, str]] = None
+    ) -> str:
+        """
+        GPT-5.1 Responses API를 사용한 비동기 응답 생성
+        """
+        # 대화 컨텍스트 구성
+        context_parts = [f"[시스템 지침]\n{self.system_prompt}\n"]
+        
+        if conversation_history:
+            context_parts.append("\n[이전 대화]\n")
+            for msg in conversation_history[-10:]:
+                role = "내담자" if msg.get("role") == "user" else "상담사"
+                context_parts.append(f"{role}: {msg.get('content', '')}\n")
+        
+        full_input = "".join(context_parts) + f"\n[현재 메시지]\n내담자: {user_message}\n\n상담사로서 따뜻하고 공감적인 응답을 해주세요:"
+        
+        try:
+            # GPT-5.1 Responses API 비동기 호출
+            response = await self.async_client.responses.create(
+                model=self.config.model,
+                input=full_input,
+                reasoning={"effort": self.config.reasoning_effort},
+            )
+            
+            # 토큰 사용량 추적
+            if self.config.track_cost and hasattr(response, 'usage') and response.usage:
+                input_tokens = getattr(response.usage, 'input_tokens', 0)
+                output_tokens = getattr(response.usage, 'output_tokens', 0)
+                self.stats.update(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    model=self.config.model,
+                    pricing=self.config.pricing
+                )
+            
+            # 응답 텍스트 추출
+            output_text = getattr(response, 'output_text', None)
+            if output_text:
+                return output_text.strip()
+            
+            if hasattr(response, 'output') and response.output:
+                for item in response.output:
+                    if hasattr(item, 'content') and item.content:
+                        for content in item.content:
+                            if hasattr(content, 'text'):
+                                return content.text.strip()
+            
+            logger.warning("GPT-5.1 응답에서 텍스트를 추출할 수 없습니다")
+            return "죄송합니다. 응답을 처리하는 중 문제가 발생했습니다."
+            
+        except Exception as e:
+            logger.error(f"GPT-5.1 Responses API async error: {e}")
+            raise
 
     def generate_response_stream(
         self,
