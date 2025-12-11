@@ -3,6 +3,7 @@ Personalization Layer for Long-Term Memory
 장기 기억 기반 개인화 레이어
 
 사용자별 맞춤형 상담 경험 제공
+Enhanced with Cross-Session Context and Pattern Analysis
 """
 
 from typing import Optional, Dict, List, Any
@@ -19,6 +20,12 @@ from src.database import (
 )
 from src.ner_extractor import KoreanNERExtractor, ConversationAnalyzer, ExtractedInfo
 from src.logging_system import PrivacyMasker
+from src.long_term_memory import (
+    LongTermMemoryManager,
+    get_memory_manager,
+    SessionMemory,
+    UserLongTermProfile
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +39,18 @@ class PersonalizationManager:
     - 대화 기록 저장 및 조회
     - 정보 추출 및 업데이트
     - 개인화된 인사말 생성
+    - [신규] 교차 세션 맥락 연결
+    - [신규] 장기 패턴 분석
+    - [신규] 치료 효과 추적
     """
 
-    def __init__(self):
+    def __init__(self, memory_storage_path: Optional[str] = None):
         self.ner = KoreanNERExtractor()
         self.privacy_masker = PrivacyMasker()
+
+        # 장기 기억 관리자 초기화
+        storage_path = memory_storage_path or "./data/long_term_memory.json"
+        self.memory_manager = get_memory_manager(storage_path)
 
     def get_or_create_user(
         self,
@@ -417,6 +431,186 @@ class PersonalizationManager:
             return "\n".join(["[사용자 맥락]"] + context_parts)
         else:
             return ""
+
+    # =========================================================================
+    # 장기 기억 통합 메서드 (신규)
+    # =========================================================================
+
+    def generate_enhanced_context(
+        self,
+        user_id: str,
+        session_id: str,
+        include_cross_session: bool = True,
+        include_patterns: bool = True
+    ) -> str:
+        """
+        강화된 개인화 컨텍스트 생성 (장기 기억 포함)
+
+        Args:
+            user_id: 사용자 ID
+            session_id: 현재 세션 ID
+            include_cross_session: 교차 세션 컨텍스트 포함
+            include_patterns: 장기 패턴 분석 포함
+
+        Returns:
+            통합 컨텍스트 문자열
+        """
+        context_parts = []
+
+        # 1. 기존 개인화 컨텍스트
+        basic_context = self.generate_personalized_context(user_id)
+        if basic_context:
+            context_parts.append(basic_context)
+
+        # 2. 장기 기억 컨텍스트
+        memory_context = self.memory_manager.generate_personalized_context(
+            user_id,
+            include_patterns=include_patterns,
+            include_bridge=include_cross_session
+        )
+        if memory_context:
+            context_parts.append(memory_context)
+
+        return "\n\n".join(context_parts)
+
+    def end_session_with_memory(
+        self,
+        user_id: str,
+        session_id: str,
+        session_summary: Dict[str, Any]
+    ):
+        """
+        세션 종료 시 장기 기억에 저장
+
+        Args:
+            user_id: 사용자 ID
+            session_id: 세션 ID
+            session_summary: 세션 요약 데이터
+        """
+        self.memory_manager.create_session_memory(
+            session_id=session_id,
+            user_id=user_id,
+            session_data=session_summary
+        )
+        logger.info(f"Session memory saved for user {user_id}")
+
+    def record_technique_with_effect(
+        self,
+        user_id: str,
+        technique: str,
+        concern: str,
+        effectiveness: float
+    ):
+        """
+        치료 기법 사용 및 효과 기록
+
+        Args:
+            user_id: 사용자 ID
+            technique: 사용된 기법
+            concern: 관련 고민
+            effectiveness: 효과 점수 (-1 to 1)
+        """
+        self.memory_manager.record_technique_usage(
+            user_id=user_id,
+            technique=technique,
+            context={"concern": concern},
+            effectiveness_score=effectiveness
+        )
+
+    def get_recommended_techniques_for_user(
+        self,
+        user_id: str,
+        current_concern: Optional[str] = None,
+        current_emotion: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        사용자 맞춤 기법 추천
+
+        Args:
+            user_id: 사용자 ID
+            current_concern: 현재 고민
+            current_emotion: 현재 감정
+
+        Returns:
+            추천 기법 리스트
+        """
+        recommendations = self.memory_manager.get_recommended_techniques(
+            user_id=user_id,
+            current_concern=current_concern,
+            current_emotion=current_emotion
+        )
+
+        return [
+            {"technique": name, "confidence": round(score, 2)}
+            for name, score in recommendations
+        ]
+
+    def get_user_progress_report(
+        self,
+        user_id: str,
+        days: int = 30
+    ) -> Dict[str, Any]:
+        """
+        사용자 진행 상황 리포트
+
+        Args:
+            user_id: 사용자 ID
+            days: 분석 기간
+
+        Returns:
+            진행 리포트
+        """
+        return self.memory_manager.generate_progress_report(user_id, days)
+
+    def add_user_strength(self, user_id: str, strength: str):
+        """사용자 강점 추가"""
+        self.memory_manager.add_identified_strength(user_id, strength)
+
+    def add_user_coping_strategy(self, user_id: str, strategy: str):
+        """효과적인 대처 전략 추가"""
+        self.memory_manager.add_coping_strategy(user_id, strategy)
+
+    def update_homework_completion(
+        self,
+        user_id: str,
+        session_id: str,
+        completed: List[str]
+    ):
+        """과제 완료 상태 업데이트"""
+        self.memory_manager.update_homework_status(user_id, session_id, completed)
+
+    def get_session_bridge_context(self, user_id: str) -> str:
+        """
+        이전 세션과의 브릿지 컨텍스트만 가져오기
+
+        Returns:
+            브릿지 컨텍스트 문자열
+        """
+        profile = self.memory_manager.get_or_create_profile(user_id)
+        sessions = self.memory_manager.get_recent_sessions(user_id, limit=3)
+
+        return self.memory_manager.context_manager.generate_session_bridge(
+            profile, sessions, profile.total_sessions + 1
+        )
+
+    def get_long_term_patterns(self, user_id: str) -> Dict[str, Any]:
+        """
+        장기 패턴 분석 결과 조회
+
+        Returns:
+            패턴 분석 결과
+        """
+        profile = self.memory_manager.get_or_create_profile(user_id)
+
+        return {
+            "recurring_concerns": profile.recurring_concerns,
+            "trigger_patterns": profile.trigger_patterns,
+            "effective_techniques": profile.effective_techniques,
+            "coping_strategies": profile.coping_strategies,
+            "identified_strengths": profile.identified_strengths,
+            "overall_progress": profile.overall_progress,
+            "total_sessions": profile.total_sessions
+        }
 
 
 # ============================================================================
