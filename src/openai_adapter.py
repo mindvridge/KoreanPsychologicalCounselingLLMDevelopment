@@ -12,12 +12,27 @@ OpenAI API 어댑터 (ChatGPT API Adapter)
 import logging
 import os
 import asyncio
-from typing import Optional, Dict, Any, List, Generator, AsyncGenerator
+from typing import Optional, Dict, Any, List, Generator, AsyncGenerator, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
 from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
+
+# 강화된 프롬프트 시스템 임포트
+try:
+    from .prompts_enhanced import (
+        EnhancedPromptTemplate,
+        PromptEvaluator,
+        evaluate_response,
+        RiskLevel,
+        CRISIS_RESOURCES
+    )
+    USE_ENHANCED_PROMPTS = True
+    logger.info("Enhanced prompts (MIND-SAFE) loaded successfully")
+except ImportError:
+    USE_ENHANCED_PROMPTS = False
+    logger.warning("Enhanced prompts not available, using basic prompts")
 
 
 @dataclass
@@ -147,8 +162,23 @@ class OpenAICounselor(LLMInterface):
         self.client = None
         self.async_client = None
         self.stats = UsageStats()
-        self.system_prompt = COUNSELOR_SYSTEM_PROMPT
-        
+
+        # 강화된 프롬프트 시스템 사용
+        if USE_ENHANCED_PROMPTS:
+            self.prompt_template = EnhancedPromptTemplate("마음이")
+            self.evaluator = PromptEvaluator()
+            self.system_prompt = self.prompt_template.get_system_prompt()
+            logger.info("Using MIND-SAFE enhanced prompts")
+        else:
+            self.prompt_template = None
+            self.evaluator = None
+            self.system_prompt = COUNSELOR_SYSTEM_PROMPT
+
+        # 대화 컨텍스트 추적
+        self.turn_count = 0
+        self.detected_emotions = []
+        self.risk_level = 0.0
+
         # GPT-5.1 모델 여부 확인
         self.use_responses_api = self.config.model.startswith("gpt-5")
 
@@ -182,32 +212,64 @@ class OpenAICounselor(LLMInterface):
             상담사 응답
         """
         try:
+            # 강화된 프롬프트 사용 시 컨텍스트 업데이트
+            if USE_ENHANCED_PROMPTS and self.prompt_template:
+                self.turn_count += 1
+
+                # 위험 수준 감지
+                risk_level, crisis_type = self.prompt_template.detect_risk_level(user_message)
+                self.risk_level = risk_level.value / 4.0  # 0-1 정규화
+
+                # 위기 상황 즉시 대응
+                if risk_level == RiskLevel.CRISIS:
+                    logger.warning(f"Crisis detected: {crisis_type}")
+                    return self.prompt_template.get_crisis_response(crisis_type)
+
+                # 컨텍스트 기반 시스템 프롬프트 갱신
+                context = {
+                    "turn_count": self.turn_count,
+                    "risk_level": self.risk_level,
+                }
+                self.system_prompt = self.prompt_template.get_system_prompt(context)
+
             # GPT-5.1: Responses API 사용
             if self.use_responses_api:
-                return self._generate_with_responses_api(user_message, conversation_history)
-            
-            # 기존 모델: Chat Completions API 사용
-            messages = self._build_messages(user_message, conversation_history)
-            response = self.client.chat.completions.create(
-                model=self.config.model,
-                messages=messages,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                top_p=self.config.top_p,
-                frequency_penalty=self.config.frequency_penalty,
-                presence_penalty=self.config.presence_penalty
-            )
-
-            # 토큰 사용량 추적
-            if self.config.track_cost and response.usage:
-                self.stats.update(
-                    input_tokens=response.usage.prompt_tokens,
-                    output_tokens=response.usage.completion_tokens,
+                response_text = self._generate_with_responses_api(user_message, conversation_history)
+            else:
+                # 기존 모델: Chat Completions API 사용
+                messages = self._build_messages(user_message, conversation_history)
+                response = self.client.chat.completions.create(
                     model=self.config.model,
-                    pricing=self.config.pricing
+                    messages=messages,
+                    temperature=self.config.temperature,
+                    max_tokens=self.config.max_tokens,
+                    top_p=self.config.top_p,
+                    frequency_penalty=self.config.frequency_penalty,
+                    presence_penalty=self.config.presence_penalty
                 )
 
-            return response.choices[0].message.content.strip()
+                # 토큰 사용량 추적
+                if self.config.track_cost and response.usage:
+                    self.stats.update(
+                        input_tokens=response.usage.prompt_tokens,
+                        output_tokens=response.usage.completion_tokens,
+                        model=self.config.model,
+                        pricing=self.config.pricing
+                    )
+
+                response_text = response.choices[0].message.content.strip()
+
+            # 응답 품질 평가 (로깅용)
+            if USE_ENHANCED_PROMPTS and self.evaluator:
+                eval_result = evaluate_response(
+                    response_text, user_message,
+                    {"risk_level": self.risk_level}
+                )
+                if eval_result.overall_score < 0.6:
+                    logger.warning(f"Low quality response: {eval_result.issues}")
+                logger.debug(f"Response evaluation: {eval_result.overall_score:.2f}")
+
+            return response_text
 
         except Exception as e:
             logger.error(f"OpenAI API error: {e}")
