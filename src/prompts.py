@@ -1,22 +1,48 @@
 """
-프롬프트 템플릿 모듈 (Enhanced v2)
+프롬프트 템플릿 모듈 (Compatibility Layer)
 Prompt Templates Module
 
-시스템 프롬프트와 대화 템플릿을 관리합니다.
-- Few-shot 예시 기반 학습
-- Chain-of-Thought 추론
-- OARS 상담 기법 통합
-- 대화 단계별 가이드
+이 파일은 하위 호환성을 위한 래퍼입니다.
+실제 구현은 prompts_enhanced.py에 있습니다.
+
+사용 권장:
+    from src.prompts_enhanced import EnhancedPromptTemplate
 """
 
+import logging
 from typing import Dict, List, Optional
 from enum import Enum
 from dataclasses import dataclass
 
+# Enhanced 모듈에서 실제 구현 import
+from .prompts_enhanced import (
+    EnhancedPromptTemplate,
+    ConversationPhase as EnhancedConversationPhase,
+    RiskLevel,
+    TherapeuticTechnique,
+    EmotionState,
+    PromptEvaluation,
+    PromptEvaluator,
+    SCOPE_BOUNDARIES,
+    CRISIS_KEYWORDS,
+    CRISIS_RESOURCES,
+    KOREAN_CULTURAL_CONTEXT,
+    TRAUMA_INFORMED_GUIDELINES,
+    GENERATIONAL_CONTEXT,
+    MIND_BODY_CONNECTION,
+    COMPLEX_EMOTIONS,
+    TECHNIQUE_MAPPING,
+    get_enhanced_template,
+    evaluate_response
+)
 
+logger = logging.getLogger(__name__)
+
+
+# 레거시 호환성을 위한 ConversationPhase (v1 값 유지)
 class ConversationPhase(Enum):
-    """대화 단계"""
-    OPENING = "opening"           # 초기 라포 형성
+    """대화 단계 (레거시 호환)"""
+    OPENING = "opening"           # 초기 라포 형성 (v2의 RAPPORT와 매핑)
     EXPLORATION = "exploration"   # 문제 탐색
     UNDERSTANDING = "understanding"  # 깊은 이해
     INTERVENTION = "intervention"    # 개입/기법 제공
@@ -25,7 +51,7 @@ class ConversationPhase(Enum):
 
 @dataclass
 class FewShotExample:
-    """Few-shot 예시 데이터"""
+    """Few-shot 예시 데이터 (레거시 호환)"""
     user_input: str
     emotion: str
     thinking: str
@@ -33,7 +59,21 @@ class FewShotExample:
 
 
 class PromptTemplate:
-    """프롬프트 템플릿 관리 클래스"""
+    """
+    프롬프트 템플릿 호환성 클래스
+
+    이 클래스는 하위 호환성을 위해 유지됩니다.
+    새로운 코드에서는 EnhancedPromptTemplate을 직접 사용하세요.
+
+    Example:
+        # 권장 (새로운 코드)
+        from src.prompts_enhanced import EnhancedPromptTemplate
+        template = EnhancedPromptTemplate("마음이")
+
+        # 레거시 지원 (기존 코드)
+        from src.prompts import PromptTemplate
+        template = PromptTemplate("마음이")
+    """
 
     def __init__(self, persona_name: str = "마음이"):
         """
@@ -42,12 +82,14 @@ class PromptTemplate:
         Args:
             persona_name: AI 상담사 이름
         """
+        logger.info("PromptTemplate initialized (using EnhancedPromptTemplate)")
         self.persona_name = persona_name
+        self._template = EnhancedPromptTemplate(persona_name)
         self.few_shot_examples = self._load_few_shot_examples()
         self.phase_guidance = self._load_phase_guidance()
 
     def _load_few_shot_examples(self) -> Dict[str, List[FewShotExample]]:
-        """Few-shot 예시 로드"""
+        """Few-shot 예시 로드 (레거시 형식)"""
         return {
             "empathy": [
                 FewShotExample(
@@ -127,150 +169,15 @@ class PromptTemplate:
 
     def get_system_prompt(self, context: Optional[Dict] = None) -> str:
         """
-        시스템 프롬프트 생성 (Enhanced v2)
+        시스템 프롬프트 생성
 
         Args:
             context: 추가 컨텍스트 정보
-                - emotion: 감지된 감정
-                - crisis_level: 위기 수준 (0-1)
-                - phase: 대화 단계
-                - turn_count: 대화 턴 수
-                - rag_context: RAG 검색 결과
 
         Returns:
             str: 시스템 프롬프트
         """
-        # 대화 단계 결정
-        phase = ConversationPhase.OPENING
-        if context:
-            turn_count = context.get("turn_count", 0)
-            if turn_count <= 2:
-                phase = ConversationPhase.OPENING
-            elif turn_count <= 5:
-                phase = ConversationPhase.EXPLORATION
-            elif turn_count <= 8:
-                phase = ConversationPhase.UNDERSTANDING
-            elif turn_count <= 12:
-                phase = ConversationPhase.INTERVENTION
-            else:
-                phase = ConversationPhase.CLOSING
-
-        base_prompt = f"""당신은 '{self.persona_name}'입니다. 한국 문화에 특화된 전문 심리상담 AI입니다.
-
-## 핵심 정체성
-- 공감적이고 따뜻한 한국어 심리상담 도우미
-- 비판단적 태도로 내담자의 이야기를 경청
-- 한국 문화(체면, 효, 집단주의)를 깊이 이해
-
-## 상담 원칙 (OARS 기법)
-- **O**pen questions: 개방형 질문으로 탐색 ("어떤 상황이었나요?")
-- **A**ffirmation: 강점과 노력 인정 ("그런 상황에서도 잘 버텨오셨네요")
-- **R**eflection: 감정 반영 및 명료화 ("~하셔서 많이 힘드셨군요")
-- **S**ummary: 핵심 내용 요약
-
-## 응답 생성 프로세스 (Chain-of-Thought)
-매 응답 전 다음을 내부적으로 고려하세요:
-
-1. **[감정 인식]** 사용자의 주요 감정과 숨겨진 감정 파악
-2. **[문화적 맥락]** 한국 문화적 요소 (체면, 관계, 기대 등) 고려
-3. **[접근법 선택]** 상황에 맞는 치료적 접근 선택
-4. **[응답 구성]** 공감 → 탐색/개입 → 지지 순서로 구성
-
-## 치료적 접근법
-- **CBT (인지행동치료)**: 생각-감정-행동 연결 탐색, 인지 재구성
-- **ACT (수용전념치료)**: 불편한 감정 수용, 가치 기반 행동
-- **마음챙김**: 현재 순간 집중, 비판단적 관찰
-- **동기강화상담**: 변화 동기 탐색, 양가감정 다루기
-
-## 한국 문화 특화 이해
-- **간접 표현**: "그냥", "별거 아니에요" = 더 깊은 감정 숨김
-- **체면**: 감정 표현의 어려움, 도움 요청 주저
-- **관계 중심**: 가족, 직장, 사회적 기대의 무게
-- **효 문화**: 부모-자녀 관계의 복잡성
-- **성취 압박**: 학업/직장 스트레스
-
-## 응답 스타일
-- 존댓말 사용, 따뜻하고 부드러운 어조
-- 2-4문장의 적절한 길이 (부담 주지 않기)
-- 한 번에 하나의 질문만
-- 판단이나 조언 강요 없음
-
-## 금지 사항
-❌ "힘내세요", "괜찮아질 거예요" 등 피상적 위로
-❌ 감정 부정/최소화 ("그 정도는...", "다른 사람들도...")
-❌ 조급한 해결책 제시
-❌ 의료 진단
-❌ 이전 응답의 반복
-
-## 위기 상황 대응 (최우선)
-자살/자해 언급, 극심한 절망감 표현 시:
-1. 공감 표현 ("정말 힘든 상황이시군요")
-2. 안전 확인 ("지금 혼자 계신가요?")
-3. 전문 자원 연결:
-   🆘 자살예방상담전화: 1393 (24시간)
-   🆘 정신건강위기상담전화: 1577-0199 (24시간)
-   🆘 응급상황: 119"""
-
-        # Few-shot 예시 추가
-        base_prompt += self._get_few_shot_section()
-
-        # 현재 대화 단계 가이드 추가
-        phase_guide = self.phase_guidance.get(phase, "")
-        if phase_guide:
-            base_prompt += f"\n\n## 현재 대화 단계: {phase.value}\n{phase_guide}"
-
-        # 컨텍스트 정보 추가
-        if context:
-            context_section = "\n\n## 현재 상황 정보"
-
-            if context.get("emotion"):
-                context_section += f"\n- 감지된 감정: {context['emotion']}"
-
-            if context.get("emotion_intensity"):
-                context_section += f"\n- 감정 강도: {context['emotion_intensity']}/10"
-
-            if context.get("crisis_level"):
-                crisis_level = context["crisis_level"]
-                if crisis_level > 0.7:
-                    context_section += "\n- ⚠️ **위기 상황 감지**: 내담자 안전 최우선 대응"
-                elif crisis_level > 0.4:
-                    context_section += "\n- ⚡ 주의 필요: 위기 징후 모니터링"
-
-            if context.get("rag_context"):
-                context_section += f"\n\n## 참고 지식\n{context['rag_context']}"
-
-            if context.get("user_concerns"):
-                concerns = ", ".join(context["user_concerns"])
-                context_section += f"\n- 주요 고민: {concerns}"
-
-            base_prompt += context_section
-
-        return base_prompt
-
-    def _get_few_shot_section(self) -> str:
-        """Few-shot 예시 섹션 생성"""
-        section = "\n\n## 응답 예시 (참고)"
-
-        # 공감 예시 1개
-        empathy_example = self.few_shot_examples["empathy"][0]
-        section += f"""
-
-### 예시 1: 공감적 응답
-내담자: "{empathy_example.user_input}"
-[내부 분석: {empathy_example.thinking}]
-{self.persona_name}: "{empathy_example.response}"
-"""
-
-        # 문화적 맥락 예시 1개
-        cultural_example = self.few_shot_examples["empathy"][2]
-        section += f"""
-### 예시 2: 한국 문화 맥락 반영
-내담자: "{cultural_example.user_input}"
-[내부 분석: {cultural_example.thinking}]
-{self.persona_name}: "{cultural_example.response}"
-"""
-
-        return section
+        return self._template.get_system_prompt(context)
 
     def get_enhanced_prompt(
         self,
@@ -303,18 +210,22 @@ class PromptTemplate:
             context["emotion_intensity"] = emotion_analysis.get("intensity", 5)
 
         if crisis_info:
-            context["crisis_level"] = crisis_info.get("risk_score", 0)
+            context["risk_level"] = crisis_info.get("risk_score", 0)
 
         if rag_context:
             context["rag_context"] = rag_context
 
-        # 시스템 프롬프트
-        system_prompt = self.get_system_prompt(context)
+        # v4 시스템 프롬프트 사용 (고급 상담 분석 포함)
+        system_prompt = self._template.get_enhanced_system_prompt_v4(
+            context=context,
+            current_message=user_message,
+            conversation_history=conversation_history
+        )
 
         # 대화 이력 포맷팅
         history_text = ""
         if conversation_history:
-            recent_history = conversation_history[-6:]  # 최근 6턴만
+            recent_history = conversation_history[-6:]
             for turn in recent_history:
                 role = "내담자" if turn["role"] == "user" else self.persona_name
                 history_text += f"\n{role}: {turn['content']}"
@@ -331,49 +242,8 @@ class PromptTemplate:
         return full_prompt
 
     def get_crisis_intervention_prompt(self, crisis_type: str) -> str:
-        """
-        위기 개입 프롬프트
-
-        Args:
-            crisis_type: 위기 유형 (suicide, self_harm, violence 등)
-
-        Returns:
-            str: 위기 개입 프롬프트
-        """
-        crisis_prompts = {
-            "suicide": """당신의 생명은 매우 소중합니다. 지금 느끼시는 고통이 얼마나 큰지 이해합니다.
-
-하지만 지금 당장 전문가의 도움이 필요합니다. 혼자 감당하지 마시고, 다음 기관에 연락해주세요:
-
-🆘 자살예방상담전화: 1393 (24시간)
-🆘 정신건강위기상담전화: 1577-0199 (24시간)
-🆘 응급상황: 119
-
-지금 이 순간이 힘들더라도, 도움을 받으시면 상황은 나아질 수 있습니다.""",
-
-            "self_harm": """스스로를 해치고 싶은 충동이 드신다니, 정말 힘든 상황이시군요.
-
-지금 당장 안전한 곳으로 이동하시고, 전문가의 도움을 받으시는 것이 중요합니다:
-
-📞 정신건강위기상담전화: 1577-0199 (24시간)
-📞 청소년전화: 1388 (24시간)
-🆘 응급상황: 119
-
-당신의 안전이 가장 중요합니다.""",
-
-            "violence": """폭력이나 학대 상황에 있으시다면, 당신의 안전이 최우선입니다.
-
-즉시 안전한 곳으로 피신하시고 도움을 요청하세요:
-
-🆘 경찰: 112
-📞 여성긴급전화: 1366 (24시간)
-📞 아동학대신고: 112
-📞 가정폭력상담: 1366
-
-위험한 상황에서는 주저하지 마시고 도움을 요청하세요."""
-        }
-
-        return crisis_prompts.get(crisis_type, crisis_prompts["suicide"])
+        """위기 개입 프롬프트"""
+        return self._template.get_crisis_response(crisis_type)
 
     def format_conversation_turn(
         self,
@@ -381,17 +251,7 @@ class PromptTemplate:
         emotion: Optional[str] = None,
         crisis_detected: bool = False
     ) -> str:
-        """
-        대화 턴 포맷팅
-
-        Args:
-            user_message: 사용자 메시지
-            emotion: 감지된 감정
-            crisis_detected: 위기 감지 여부
-
-        Returns:
-            str: 포맷된 대화
-        """
+        """대화 턴 포맷팅"""
         formatted = f"내담자: {user_message}"
 
         if emotion:
@@ -403,33 +263,15 @@ class PromptTemplate:
         return formatted
 
     def get_greeting_prompt(self) -> str:
-        """
-        인사 프롬프트
-
-        Returns:
-            str: 인사말
-        """
+        """인사 프롬프트"""
         return f"안녕하세요, {self.persona_name}입니다. 오늘은 어떤 이야기를 나누고 싶으신가요? 편안하게 말씀해주세요."
 
     def get_closing_prompt(self) -> str:
-        """
-        종료 프롬프트
-
-        Returns:
-            str: 마무리 인사
-        """
+        """종료 프롬프트"""
         return "오늘 함께 이야기 나눠주셔서 감사합니다. 힘든 시간이지만 스스로를 잘 돌보시길 바랍니다. 언제든 다시 찾아와주세요."
 
     def get_reflection_question(self, topic: str = "general") -> List[str]:
-        """
-        성찰 질문 생성
-
-        Args:
-            topic: 주제 (general, emotion, thought, behavior)
-
-        Returns:
-            List[str]: 성찰 질문 리스트
-        """
+        """성찰 질문 생성"""
         questions = {
             "general": [
                 "그 상황에서 어떤 생각이 드셨나요?",
@@ -452,19 +294,10 @@ class PromptTemplate:
                 "앞으로는 어떻게 하고 싶으신가요?"
             ]
         }
-
         return questions.get(topic, questions["general"])
 
     def get_coping_strategy_prompt(self, emotion_type: str) -> str:
-        """
-        대처 전략 프롬프트
-
-        Args:
-            emotion_type: 감정 유형 (anxiety, depression, anger, stress)
-
-        Returns:
-            str: 대처 전략 안내
-        """
+        """대처 전략 프롬프트"""
         strategies = {
             "anxiety": """불안할 때 도움이 될 수 있는 방법들입니다:
 
@@ -498,16 +331,10 @@ class PromptTemplate:
 
 어떤 것부터 시작해보시겠어요?"""
         }
-
         return strategies.get(emotion_type, "함께 도움이 될 만한 방법을 찾아봐요.")
 
     def get_validation_response(self) -> List[str]:
-        """
-        타당화 응답 생성
-
-        Returns:
-            List[str]: 타당화 응답 리스트
-        """
+        """타당화 응답 생성"""
         return [
             "그런 상황에서 그렇게 느끼시는 것은 충분히 이해가 됩니다.",
             "당신의 감정은 모두 타당하고 소중합니다.",
@@ -515,15 +342,73 @@ class PromptTemplate:
             "지금 느끼시는 것을 느끼셔도 괜찮아요."
         ]
 
+    # Enhanced 기능 접근자
+    def get_technique_prompt(self, emotion_type: str, level: str = "immediate") -> str:
+        """치료 기법 프롬프트"""
+        return self._template.get_technique_prompt(emotion_type, level)
+
+    def detect_risk_level(self, message: str):
+        """위험 수준 감지"""
+        return self._template.detect_risk_level(message)
+
+    def get_generational_context(self, age_group: str) -> str:
+        """세대별 맥락"""
+        return self._template.get_generational_context(age_group)
+
+    def get_trauma_informed_response(self, indicator_type: str = "general") -> str:
+        """트라우마 인식 대응"""
+        return self._template.get_trauma_informed_response(indicator_type)
+
+    def get_grounding_technique(self, technique_name: str = "5-4-3-2-1") -> str:
+        """그라운딩 기법"""
+        return self._template.get_grounding_technique(technique_name)
+
 
 # 기본 템플릿 인스턴스
 default_template = PromptTemplate()
 
 
+# 하위 호환성을 위한 export
+__all__ = [
+    # 레거시 (호환성)
+    'PromptTemplate',
+    'ConversationPhase',
+    'FewShotExample',
+    'default_template',
+    # Enhanced (권장)
+    'EnhancedPromptTemplate',
+    'RiskLevel',
+    'TherapeuticTechnique',
+    'EmotionState',
+    'PromptEvaluation',
+    'PromptEvaluator',
+    'get_enhanced_template',
+    'evaluate_response',
+    # 상수
+    'SCOPE_BOUNDARIES',
+    'CRISIS_KEYWORDS',
+    'CRISIS_RESOURCES',
+    'KOREAN_CULTURAL_CONTEXT',
+    'TRAUMA_INFORMED_GUIDELINES',
+    'GENERATIONAL_CONTEXT',
+    'MIND_BODY_CONNECTION',
+    'COMPLEX_EMOTIONS',
+    'TECHNIQUE_MAPPING',
+]
+
+
 if __name__ == "__main__":
     # 테스트
+    print("=== PromptTemplate (compatibility) 테스트 ===\n")
+
     template = PromptTemplate("마음이")
-    print("=== 시스템 프롬프트 ===")
-    print(template.get_system_prompt())
-    print("\n=== 인사말 ===")
+
+    print("=== 인사말 ===")
     print(template.get_greeting_prompt())
+
+    print("\n=== 시스템 프롬프트 (처음 500자) ===")
+    prompt = template.get_system_prompt({"turn_count": 3})
+    print(prompt[:500] + "...")
+
+    print("\n=== 대처 전략 (불안) ===")
+    print(template.get_coping_strategy_prompt("anxiety"))

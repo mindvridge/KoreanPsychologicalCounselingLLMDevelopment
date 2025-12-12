@@ -24,6 +24,17 @@ from src.emotion_analyzer_v2 import KoreanEmotionAnalyzer
 from src.safety_system_v2 import SafetySystem, RiskLevel
 from src.assessments import AssessmentManager, PHQ9Assessment, GAD7Assessment, K10Assessment
 
+# 새로 추가된 시스템들
+try:
+    from src.counseling_effectiveness import CounselingEffectivenessSystem
+    from src.self_check_system import SelfCheckSystem
+    from src.prompts_enhanced import ConversationPhase
+    HAS_NEW_SYSTEMS = True
+except ImportError:
+    HAS_NEW_SYSTEMS = False
+    logger = logging.getLogger(__name__)
+    logger.warning("New counseling systems not available, using basic mode")
+
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
@@ -265,6 +276,14 @@ session_manager = SessionManager(timeout_minutes=30)
 emotion_analyzer = KoreanEmotionAnalyzer()
 assessment_manager = AssessmentManager()
 
+# 상담 효과 시스템
+if HAS_NEW_SYSTEMS:
+    counseling_system = CounselingEffectivenessSystem()
+    self_check_system = SelfCheckSystem()
+else:
+    counseling_system = None
+    self_check_system = None
+
 
 # ============================================================================
 # 핵심 함수
@@ -279,7 +298,7 @@ def chat_response(
     message: str,
     history: List[List[str]],
     session_id: str
-) -> Tuple[str, List[List[str]], str, str, str, Dict]:
+) -> Tuple[str, List[List[str]], str, str, str, Dict, str, str]:
     """
     채팅 응답 생성
 
@@ -289,7 +308,8 @@ def chat_response(
         session_id: 세션 ID
 
     Returns:
-        Tuple: (응답, 업데이트된 히스토리, 감정 상태, 위기 경고, 세션 ID, 감정 그래프 데이터)
+        Tuple: (응답, 업데이트된 히스토리, 감정 상태, 위기 경고, 세션 ID,
+                감정 그래프 데이터, 상담 품질, 세션 단계)
     """
     # 세션 가져오기
     session = session_manager.get_session(session_id)
@@ -355,7 +375,13 @@ def chat_response(
     # 감정 그래프 데이터
     emotion_graph = create_emotion_graph(session["emotion_history"])
 
-    return "", history, emotion_status, crisis_warning, session_id, emotion_graph
+    # 상담 품질 분석
+    quality_status = format_counseling_quality(session, response)
+
+    # 세션 단계
+    phase_status = format_session_phase(len(session["conversation_history"]) // 2)
+
+    return "", history, emotion_status, crisis_warning, session_id, emotion_graph, quality_status, phase_status
 
 
 def generate_template_response(
@@ -554,6 +580,144 @@ def create_emotion_graph(emotion_history: List[Dict]) -> Dict:
     return fig
 
 
+def format_counseling_quality(session: Dict, response: str) -> str:
+    """
+    상담 품질 상태 포맷팅
+
+    Args:
+        session: 세션 데이터
+        response: AI 응답
+
+    Returns:
+        str: 포맷된 상담 품질 상태
+    """
+    if not HAS_NEW_SYSTEMS or not counseling_system:
+        return "상담 품질 분석 비활성화"
+
+    try:
+        # 대화 이력 준비
+        conversation_history = session.get("conversation_history", [])
+
+        # 마지막 사용자 메시지
+        user_messages = [m for m in conversation_history if m.get("role") == "user"]
+        last_user_msg = user_messages[-1]["content"] if user_messages else ""
+
+        # 상담 효과 분석
+        analysis = counseling_system.analyze_interaction(
+            user_message=last_user_msg,
+            ai_response=response,
+            conversation_history=conversation_history
+        )
+
+        # 점수 계산
+        quality_score = analysis.get("quality_score", 0)
+        empathy_score = analysis.get("empathy_analysis", {}).get("score", 0)
+        question_quality = analysis.get("question_analysis", {}).get("quality_score", 0)
+
+        # 등급 결정
+        if quality_score >= 0.8:
+            grade = "A"
+            grade_emoji = "🌟"
+        elif quality_score >= 0.6:
+            grade = "B"
+            grade_emoji = "✨"
+        elif quality_score >= 0.4:
+            grade = "C"
+            grade_emoji = "📈"
+        else:
+            grade = "D"
+            grade_emoji = "💪"
+
+        # 품질 바
+        bar_length = 10
+        filled = int(quality_score * bar_length)
+        bar = "█" * filled + "░" * (bar_length - filled)
+
+        status = f"""**상담 품질 분석** {grade_emoji}
+
+**종합 등급: {grade}**
+
+품질: {quality_score:.0%}
+{bar}
+
+📊 세부 점수:
+• 공감: {empathy_score:.0%}
+• 질문: {question_quality:.0%}
+"""
+        return status
+
+    except Exception as e:
+        logger.error(f"Counseling quality analysis error: {e}")
+        return "분석 중..."
+
+
+def format_session_phase(turn_count: int) -> str:
+    """
+    세션 단계 시각화
+
+    Args:
+        turn_count: 대화 턴 수
+
+    Returns:
+        str: 포맷된 세션 단계
+    """
+    # 단계 정의
+    phases = [
+        {"name": "라포 형성", "emoji": "🤝", "range": (0, 2)},
+        {"name": "문제 탐색", "emoji": "🔍", "range": (3, 5)},
+        {"name": "깊은 이해", "emoji": "💡", "range": (6, 8)},
+        {"name": "개입/기법", "emoji": "🛠️", "range": (9, 12)},
+        {"name": "마무리", "emoji": "🌅", "range": (13, 100)},
+    ]
+
+    # 현재 단계 결정
+    current_idx = 0
+    for i, phase in enumerate(phases):
+        if phase["range"][0] <= turn_count <= phase["range"][1]:
+            current_idx = i
+            break
+        elif turn_count > phase["range"][1]:
+            current_idx = i
+
+    current_phase = phases[min(current_idx, len(phases)-1)]
+
+    # 진행 바 생성
+    progress_parts = []
+    for i, phase in enumerate(phases):
+        if i < current_idx:
+            progress_parts.append(f"✅ {phase['emoji']}")
+        elif i == current_idx:
+            progress_parts.append(f"🔵 {phase['emoji']}")
+        else:
+            progress_parts.append(f"⚪ {phase['emoji']}")
+
+    progress_bar = " → ".join(progress_parts)
+
+    status = f"""**세션 단계**
+
+{current_phase['emoji']} **{current_phase['name']}**
+
+{progress_bar}
+
+대화 턴: {turn_count}회
+"""
+
+    # 단계별 안내
+    phase_tips = {
+        "라포 형성": "안전한 공간을 만들고 있어요",
+        "문제 탐색": "고민을 탐색하고 있어요",
+        "깊은 이해": "핵심 감정을 이해하고 있어요",
+        "개입/기법": "도움이 될 방법을 찾고 있어요",
+        "마무리": "대화를 마무리하고 있어요"
+    }
+
+    tip = phase_tips.get(current_phase['name'], "")
+    if tip:
+        status += f"\n💬 {tip}"
+
+    return status
+
+
 def start_assessment(assessment_type: str, session_id: str) -> Tuple[str, str, str]:
     """
     심리검사 시작
@@ -594,7 +758,7 @@ def start_assessment(assessment_type: str, session_id: str) -> Tuple[str, str, s
     return question_text, "", session_id
 
 
-def clear_chat(session_id: str) -> Tuple[None, str, str, str]:
+def clear_chat(session_id: str) -> Tuple[List, str, str, str, Dict, str, str]:
     """
     채팅 초기화
 
@@ -602,7 +766,7 @@ def clear_chat(session_id: str) -> Tuple[None, str, str, str]:
         session_id: 세션 ID
 
     Returns:
-        Tuple: (빈 히스토리, 빈 감정 상태, 빈 경고, 새 세션 ID)
+        Tuple: (빈 히스토리, 빈 감정 상태, 빈 경고, 새 세션 ID, 빈 그래프, 품질 초기화, 단계 초기화)
     """
     new_session_id = create_new_session()
 
@@ -613,7 +777,10 @@ def clear_chat(session_id: str) -> Tuple[None, str, str, str]:
 
 당신의 감정은 모두 소중하고 존중받을 가치가 있습니다."""
 
-    return [[None, greeting]], "", "", new_session_id
+    initial_phase = format_session_phase(0)
+    initial_quality = "대화를 시작하면 상담 품질이 표시됩니다."
+
+    return [[None, greeting]], "", "", new_session_id, {}, initial_quality, initial_phase
 
 
 def show_emergency_resources() -> str:
@@ -737,15 +904,23 @@ def build_interface():
             # 오른쪽: 사이드바 (30%)
             with gr.Column(scale=3):
 
+                # 세션 단계 (새로 추가)
+                with gr.Accordion("🎯 세션 단계", open=True):
+                    phase_status = gr.Markdown("대화를 시작하면 세션 단계가 표시됩니다.")
+
                 # 감정 상태
                 with gr.Accordion("💭 현재 감정 상태", open=True):
                     emotion_status = gr.Markdown("대화를 시작하면 감정 상태가 표시됩니다.")
+
+                # 상담 품질 (새로 추가)
+                with gr.Accordion("📈 상담 품질", open=True):
+                    quality_status = gr.Markdown("대화를 시작하면 상담 품질이 표시됩니다.")
 
                 # 위기 경고
                 crisis_warning = gr.Markdown(visible=False)
 
                 # 감정 그래프
-                with gr.Accordion("📊 감정 변화 추이", open=True):
+                with gr.Accordion("📊 감정 변화 추이", open=False):
                     emotion_graph = gr.Plot(label="감정 그래프")
 
                 # 위기 자원
@@ -780,20 +955,20 @@ def build_interface():
         msg.submit(
             chat_response,
             inputs=[msg, chatbot, session_id_state],
-            outputs=[msg, chatbot, emotion_status, crisis_warning, session_id_state, emotion_graph]
+            outputs=[msg, chatbot, emotion_status, crisis_warning, session_id_state, emotion_graph, quality_status, phase_status]
         )
 
         send_btn.click(
             chat_response,
             inputs=[msg, chatbot, session_id_state],
-            outputs=[msg, chatbot, emotion_status, crisis_warning, session_id_state, emotion_graph]
+            outputs=[msg, chatbot, emotion_status, crisis_warning, session_id_state, emotion_graph, quality_status, phase_status]
         )
 
         # 초기화
         clear_btn.click(
             clear_chat,
             inputs=[session_id_state],
-            outputs=[chatbot, emotion_status, crisis_warning, session_id_state]
+            outputs=[chatbot, emotion_status, crisis_warning, session_id_state, emotion_graph, quality_status, phase_status]
         )
 
         # 긴급 연락처 버튼
