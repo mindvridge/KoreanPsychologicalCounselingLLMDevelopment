@@ -159,23 +159,58 @@ API 문서: `http://localhost:8000/docs`
 ```
 korean-mental-health-llm/
 ├── src/
-│   ├── __init__.py              # 패키지 초기화
-│   ├── main.py                  # 메인 LLM 클래스
-│   ├── safety_system.py         # 위기 감지 시스템
-│   ├── emotion_analyzer.py      # 감정 분석
-│   ├── prompts.py               # 프롬프트 템플릿
-│   └── utils.py                 # 유틸리티 함수
+│   ├── __init__.py                 # 패키지 초기화
+│   ├── main.py                     # 메인 LLM 클래스
+│   │
+│   ├── # 감정 분석 시스템
+│   ├── emotion_analyzer.py         # 감정 분석 (v1 호환 래퍼)
+│   ├── emotion_analyzer_v2.py      # 감정 분석 v2 (권장)
+│   │
+│   ├── # 안전 시스템 (4층 구조)
+│   ├── safety_system.py            # 위기 감지 (v1 호환 래퍼)
+│   ├── safety_system_v2.py         # 4층 위기 감지 v2 (권장)
+│   ├── response_guardrails.py      # 응답 가드레일
+│   ├── ethical_boundaries.py       # 윤리적 경계
+│   ├── emotional_safety.py         # 정서적 안전
+│   ├── consistency_checker.py      # 일관성 검사
+│   ├── hallucination_prevention.py # 환각 방지
+│   ├── self_check_system.py        # 자기 점검 (6종 통합)
+│   │
+│   ├── # 프롬프트 시스템
+│   ├── prompts.py                  # 프롬프트 템플릿 (v1 호환 래퍼)
+│   ├── prompts_enhanced.py         # MIND-SAFE 프롬프트 v4 (권장)
+│   │
+│   ├── # 상담 효과 시스템
+│   ├── counseling_effectiveness.py # 상담 품질 분석
+│   ├── empathy_system.py           # 공감 시스템
+│   ├── therapeutic_questions.py    # 치료적 질문
+│   ├── session_structure.py        # 세션 구조
+│   │
+│   ├── # 세션 및 데이터
+│   ├── session_storage.py          # SQLite 세션 저장소
+│   ├── conversation_state.py       # 대화 상태 관리
+│   │
+│   ├── # RAG 및 개인화
+│   ├── rag_system.py               # RAG 시스템
+│   ├── personalization.py          # 개인화
+│   ├── long_term_memory.py         # 장기 기억
+│   │
+│   └── utils.py                    # 유틸리티 함수
 ├── data/
-│   ├── crisis_keywords.json     # 위기 키워드 목록
+│   ├── crisis_keywords.json        # 위기 키워드 목록
 │   └── therapeutic_responses.json  # 치료적 응답 템플릿
 ├── tests/
-│   └── test_safety.py           # 안전 시스템 테스트
+│   ├── test_safety.py              # 안전 시스템 테스트
+│   ├── test_new_systems.py         # 새 시스템 테스트
+│   └── ...
+├── app.py                          # Gradio 웹 인터페이스
+├── main_integrated.py              # 통합 실행 파일
 ├── configs/
-│   └── config.yaml              # 설정 파일
-├── requirements.txt             # Python 패키지 의존성
-├── Dockerfile                   # Docker 이미지 빌드
-├── .env.example                 # 환경 변수 예시
-└── README.md                    # 프로젝트 문서
+│   └── config.yaml                 # 설정 파일
+├── requirements.txt                # Python 패키지 의존성
+├── Dockerfile                      # Docker 이미지 빌드
+├── .env.example                    # 환경 변수 예시
+└── README.md                       # 프로젝트 문서
 ```
 
 ## ⚙️ 설정
