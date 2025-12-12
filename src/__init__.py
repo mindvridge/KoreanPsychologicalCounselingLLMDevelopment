@@ -8,25 +8,21 @@ Korean Mental Health Counseling LLM Package
 __version__ = "0.2.0"
 __author__ = "Korean Mental Health LLM Team"
 
-# 메인 클래스
-from .main import KoreanMentalHealthLLM
+# 메인 클래스 (torch 의존성 있음 - 지연 로딩)
+try:
+    from .main import KoreanMentalHealthLLM
+except ImportError:
+    KoreanMentalHealthLLM = None
 
-# 안전 시스템 (v2 권장)
-from .safety_system import CrisisDetectionSystem  # 레거시 호환
-from .safety_system_v2 import SafetySystem, RiskLevel  # v2 권장
+# 안전 시스템 (v2 - 직접 import)
+from .safety_system_v2 import SafetySystem, RiskLevel
 
-# 감정 분석 (v2 권장)
-from .emotion_analyzer import EmotionAnalyzer  # 레거시 호환
-from .emotion_analyzer_v2 import KoreanEmotionAnalyzer  # v2 권장
+# 감정 분석 (v2 - 직접 import)
+from .emotion_analyzer_v2 import KoreanEmotionAnalyzer
 
 __all__ = [
-    # 메인
     "KoreanMentalHealthLLM",
-    # 안전 시스템
-    "CrisisDetectionSystem",  # 레거시
-    "SafetySystem",  # v2 권장
+    "SafetySystem",
     "RiskLevel",
-    # 감정 분석
-    "EmotionAnalyzer",  # 레거시
-    "KoreanEmotionAnalyzer",  # v2 권장
+    "KoreanEmotionAnalyzer",
 ]
