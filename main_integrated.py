@@ -25,6 +25,24 @@ from src.rag_system import MentalHealthRAG
 from src.monitoring import ProductionMonitor, init_monitor
 from src.logging_system import ConversationLogger, init_conversation_logger
 
+# 안전 시스템 6종 통합
+from src.self_check_system import (
+    SelfCheckSystem, get_self_check_system,
+    perform_self_check, ResponseStatus
+)
+
+# 세션 영속성
+from src.session_storage import (
+    SQLiteSessionStorage, SessionData,
+    init_session_storage, get_session_storage
+)
+
+# 상담 효과 시스템
+from src.counseling_effectiveness import (
+    CounselingEffectivenessSystem, get_effectiveness_system,
+    analyze_counseling_effectiveness, CounselingQuality
+)
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -66,11 +84,14 @@ class IntegratedMentalHealthSystem:
         self.llm: Optional[KoreanMentalHealthLLM] = None
         self.crisis_detector: Optional[LLMCrisisEvaluator] = None
         self.safety_system: Optional[SafetySystem] = None  # 통합 안전 시스템
+        self.response_checker: Optional[SelfCheckSystem] = None  # 응답 안전 검사 시스템
         self.emotion_analyzer: Optional[KoreanEmotionAnalyzer] = None
         self.assessment_manager: Optional[AssessmentManager] = None
         self.rag_system: Optional[MentalHealthRAG] = None
         self.monitor: Optional[ProductionMonitor] = None
         self.logger: Optional[ConversationLogger] = None
+        self.session_storage: Optional[SQLiteSessionStorage] = None  # 세션 영속성
+        self.counseling_system: Optional[CounselingEffectivenessSystem] = None  # 상담 효과 시스템
 
         # System state
         self.is_initialized = False
@@ -179,6 +200,27 @@ class IntegratedMentalHealthSystem:
             self.initialization_errors.append(("logging", str(e)))
             success = False
 
+        # 2.5. Initialize session storage
+        try:
+            logger.info("   Initializing session storage...")
+            session_config = self.config.get("session", {})
+            self.session_storage = init_session_storage(
+                db_path=session_config.get("db_path", "./data/sessions.db"),
+                session_ttl_hours=session_config.get("ttl_hours", 24),
+                max_sessions_per_user=session_config.get("max_per_user", 5),
+                enable_encryption=session_config.get("enable_encryption", False)
+            )
+            # 만료된 세션 정리
+            cleaned = self.session_storage.cleanup_expired_sessions()
+            if cleaned > 0:
+                logger.info(f"   Cleaned up {cleaned} expired sessions")
+            logger.info("✓ Session storage initialized")
+        except Exception as e:
+            logger.error(f"✗ Session storage initialization failed: {e}")
+            self.initialization_errors.append(("session_storage", str(e)))
+            # 세션 저장소 없이도 동작 가능 (메모리 폴백)
+            self.session_storage = None
+
         # 3. Initialize RAG system
         try:
             logger.info("3/7 Initializing RAG system...")
@@ -213,11 +255,22 @@ class IntegratedMentalHealthSystem:
             logger.info("5/7 Initializing crisis detection system...")
             self.crisis_detector = LLMCrisisEvaluator()
             self.safety_system = SafetySystem()  # 통합 안전 시스템 초기화
-            logger.info("✓ Crisis detection system initialized")
+            self.response_checker = get_self_check_system(strict_mode=True)  # 응답 안전 검사
+            logger.info("✓ Crisis detection & response safety system initialized")
         except Exception as e:
             logger.error(f"✗ Crisis detector initialization failed: {e}")
             self.initialization_errors.append(("crisis_detector", str(e)))
             success = False
+
+        # 5.5. Initialize counseling effectiveness system
+        try:
+            logger.info("   Initializing counseling effectiveness system...")
+            self.counseling_system = get_effectiveness_system()
+            logger.info("✓ Counseling effectiveness system initialized")
+        except Exception as e:
+            logger.error(f"✗ Counseling effectiveness system failed: {e}")
+            self.initialization_errors.append(("counseling_system", str(e)))
+            # 상담 효과 시스템 없이도 동작 가능
 
         # 6. Initialize assessment manager
         try:
@@ -449,6 +502,23 @@ class IntegratedMentalHealthSystem:
             }
 
         try:
+            # 0. Load or create session from storage
+            session_data = None
+            if self.session_storage:
+                session_data = self.session_storage.get_session(session_id)
+                if session_data:
+                    # 세션 존재: 대화 이력 로드
+                    if conversation_history is None:
+                        conversation_history = session_data.conversation_history
+                    logger.debug(f"Session loaded: {session_id}, turns: {session_data.turn_count}")
+                else:
+                    # 세션 없음: 새로 생성
+                    session_data = self.session_storage.create_session(
+                        session_id=session_id,
+                        metadata={"created_by": "process_message"}
+                    )
+                    logger.debug(f"New session created: {session_id}")
+
             # 1. Emotion analysis
             emotion_result = None
             if self.emotion_analyzer:
@@ -554,7 +624,63 @@ class IntegratedMentalHealthSystem:
                     else:
                         response = "죄송합니다. LLM이 올바르게 초기화되지 않았습니다."
 
-            # 5. Assessment recommendation
+            # 5. Response safety check (6종 안전 시스템 통합 검사)
+            safety_check_result = None
+            if self.response_checker and response:
+                try:
+                    safety_check_result = self.response_checker.check_response(
+                        response=response,
+                        user_message=user_message,
+                        context={
+                            "emotion": emotion_result,
+                            "crisis_detected": crisis_detected,
+                            "conversation_history": conversation_history
+                        }
+                    )
+
+                    # 응답 상태에 따른 처리
+                    if safety_check_result.status == ResponseStatus.BLOCKED:
+                        # 차단된 경우: 안전한 대체 응답 사용
+                        logger.warning(f"응답 차단됨: {safety_check_result.critical_issues}")
+                        response = self._get_safe_fallback_response(
+                            safety_check_result.critical_issues
+                        )
+                    elif safety_check_result.status == ResponseStatus.NEEDS_REVISION:
+                        # 수정 필요: 수정된 응답 사용 또는 재생성
+                        if safety_check_result.corrected_response:
+                            response = safety_check_result.corrected_response
+                            logger.info("응답이 자동 수정되었습니다")
+                        else:
+                            logger.warning(f"응답 수정 필요: {safety_check_result.warnings[:3]}")
+                    elif safety_check_result.status == ResponseStatus.WARNING:
+                        # 경고: 로그만 기록
+                        logger.info(f"응답 경고: {safety_check_result.warnings[:2]}")
+
+                except Exception as e:
+                    logger.warning(f"Response safety check failed: {e}")
+
+            # 6. Counseling effectiveness analysis
+            counseling_analysis = None
+            if self.counseling_system and response:
+                try:
+                    counseling_analysis = self.counseling_system.analyze_interaction(
+                        session_id=session_id,
+                        user_message=user_message,
+                        assistant_response=response,
+                        context={
+                            "emotion": emotion_result.get("primary_emotion") if emotion_result else None,
+                            "crisis_detected": crisis_detected,
+                            "conversation_history": conversation_history
+                        }
+                    )
+                    logger.debug(
+                        f"Counseling quality: {counseling_analysis.quality_grade.value}, "
+                        f"score: {counseling_analysis.overall_quality_score:.1f}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Counseling effectiveness analysis failed: {e}")
+
+            # 7. Assessment recommendation
             suggested_assessment = None
             if self.assessment_manager and emotion_result:
                 suggested_assessment = self.assessment_manager.smart_selection({
@@ -614,6 +740,40 @@ class IntegratedMentalHealthSystem:
             if crisis_detected:
                 self.stats["crisis_detections"] += 1
 
+            # 9.5. Save to session storage
+            if self.session_storage:
+                try:
+                    # 사용자 메시지 저장
+                    self.session_storage.add_message(
+                        session_id=session_id,
+                        role="user",
+                        content=user_message,
+                        metadata={"emotion": emotion_result.get("primary_emotion") if emotion_result else None}
+                    )
+                    # 어시스턴트 응답 저장
+                    primary_emotion = None
+                    if emotion_result and isinstance(emotion_result, dict):
+                        pe = emotion_result.get("primary_emotion")
+                        primary_emotion = pe.get("emotion") if isinstance(pe, dict) else str(pe) if pe else None
+
+                    self.session_storage.add_message(
+                        session_id=session_id,
+                        role="assistant",
+                        content=response,
+                        metadata={
+                            "crisis_detected": crisis_detected,
+                            "safety_status": safety_check_result.status.value if safety_check_result else None
+                        }
+                    )
+                    # 세션 메타데이터 업데이트
+                    self.session_storage.update_session(
+                        session_id=session_id,
+                        crisis_detected=crisis_detected,
+                        emotion=primary_emotion
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to save to session storage: {e}")
+
             # 10. Build response
             return {
                 "response": response,
@@ -623,6 +783,18 @@ class IntegratedMentalHealthSystem:
                 "emotions": emotion_result,
                 "suggested_assessment": suggested_assessment,
                 "response_time": response_time,
+                "safety_check": {
+                    "status": safety_check_result.status.value if safety_check_result else "unchecked",
+                    "score": safety_check_result.overall_score if safety_check_result else None,
+                    "warnings": safety_check_result.warnings[:3] if safety_check_result else [],
+                    "passed": safety_check_result.status in [ResponseStatus.SAFE, ResponseStatus.WARNING] if safety_check_result else True
+                },
+                "counseling_quality": {
+                    "score": counseling_analysis.overall_quality_score if counseling_analysis else None,
+                    "grade": counseling_analysis.quality_grade.value if counseling_analysis else None,
+                    "interventions": counseling_analysis.recommended_interventions[:3] if counseling_analysis else [],
+                    "session_phase": counseling_analysis.session_progress.current_phase if counseling_analysis and counseling_analysis.session_progress else None
+                },
                 "metadata": {
                     "session_id": session_id,
                     "timestamp": datetime.now().isoformat(),
@@ -707,6 +879,43 @@ class IntegratedMentalHealthSystem:
 제가 계속 함께 있겠습니다. 어떻게 도와드릴까요?
 """
 
+    def _get_safe_fallback_response(self, issues: List[str]) -> str:
+        """
+        안전 문제로 차단된 경우 대체 응답 생성
+
+        Args:
+            issues: 감지된 문제 목록
+
+        Returns:
+            str: 안전한 대체 응답
+        """
+        # 문제 유형에 따른 대체 응답
+        if any("의학" in issue or "medical" in issue.lower() for issue in issues):
+            return (
+                "의료적인 부분에 대해서는 제가 정확한 정보를 드리기 어렵습니다. "
+                "전문 의료인과 상담하시는 것을 권장드립니다. "
+                "그 외에 마음이 힘드신 부분이 있으시다면 함께 이야기 나눠보아요."
+            )
+        elif any("법" in issue or "legal" in issue.lower() for issue in issues):
+            return (
+                "법적인 문제에 대해서는 제가 조언을 드리기 어렵습니다. "
+                "전문 법률 상담을 받으시는 것이 좋을 것 같아요. "
+                "혹시 이 상황 때문에 마음이 힘드신 건 아닌지 여쭤봐도 될까요?"
+            )
+        elif any("진단" in issue or "diagnosis" in issue.lower() for issue in issues):
+            return (
+                "정확한 진단은 전문가의 평가가 필요한 영역입니다. "
+                "지금 느끼시는 어려움에 대해 조금 더 이야기해 주시겠어요? "
+                "함께 어떤 도움이 필요한지 생각해볼 수 있을 것 같아요."
+            )
+        else:
+            # 일반적인 안전 대체 응답
+            return (
+                "말씀해 주신 내용을 잘 들었습니다. "
+                "지금 어떤 마음이 드시는지, 조금 더 이야기해 주실 수 있을까요? "
+                "함께 이야기 나누면서 도움이 될 수 있는 방법을 찾아보겠습니다."
+            )
+
     def _detect_therapy_technique(self, response: str) -> Optional[str]:
         """Detect which therapy technique was used in response"""
         cbt_keywords = ["생각", "인지", "왜곡", "재구성"]
@@ -731,13 +940,23 @@ class IntegratedMentalHealthSystem:
                 "llm": self.llm is not None,
                 "crisis_detector": self.crisis_detector is not None,
                 "safety_system": self.safety_system is not None,
+                "response_checker": self.response_checker is not None,
                 "emotion_analyzer": self.emotion_analyzer is not None,
                 "assessment_manager": self.assessment_manager is not None,
                 "rag_system": self.rag_system is not None and self.rag_system.is_indexed,
                 "monitoring": self.monitor is not None,
-                "logging": self.logger is not None
+                "logging": self.logger is not None,
+                "session_storage": self.session_storage is not None,
+                "counseling_system": self.counseling_system is not None
             }
         }
+
+        # Add session stats if available
+        if self.session_storage:
+            try:
+                status["session_stats"] = self.session_storage.get_session_stats()
+            except Exception:
+                pass
 
         # Add monitoring stats if available
         if self.monitor:
