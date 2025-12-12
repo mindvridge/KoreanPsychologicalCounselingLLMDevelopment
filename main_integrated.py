@@ -18,7 +18,7 @@ load_dotenv()  # 프로젝트 루트의 .env 파일 로드
 
 # Import all system components
 from src.main import KoreanMentalHealthLLM
-from src.safety_system_v2 import LLMCrisisEvaluator, RiskLevel
+from src.safety_system_v2 import SafetySystem, LLMCrisisEvaluator, RiskLevel
 from src.emotion_analyzer_v2 import KoreanEmotionAnalyzer
 from src.assessments import AssessmentManager, PHQ9Assessment, GAD7Assessment, K10Assessment
 from src.rag_system import MentalHealthRAG
@@ -65,6 +65,7 @@ class IntegratedMentalHealthSystem:
         # Initialize components
         self.llm: Optional[KoreanMentalHealthLLM] = None
         self.crisis_detector: Optional[LLMCrisisEvaluator] = None
+        self.safety_system: Optional[SafetySystem] = None  # 통합 안전 시스템
         self.emotion_analyzer: Optional[KoreanEmotionAnalyzer] = None
         self.assessment_manager: Optional[AssessmentManager] = None
         self.rag_system: Optional[MentalHealthRAG] = None
@@ -207,10 +208,11 @@ class IntegratedMentalHealthSystem:
             self.initialization_errors.append(("emotion_analyzer", str(e)))
             success = False
 
-        # 5. Initialize crisis detector
+        # 5. Initialize crisis detector and safety system
         try:
             logger.info("5/7 Initializing crisis detection system...")
             self.crisis_detector = LLMCrisisEvaluator()
+            self.safety_system = SafetySystem()  # 통합 안전 시스템 초기화
             logger.info("✓ Crisis detection system initialized")
         except Exception as e:
             logger.error(f"✗ Crisis detector initialization failed: {e}")
@@ -363,16 +365,22 @@ class IntegratedMentalHealthSystem:
             results["llm"] = False
             logger.warning("LLM is None, validation skipped")
 
-        # Validate crisis detector
-        if self.crisis_detector:
+        # Validate crisis detector and safety system
+        if self.safety_system:
             try:
-                # LLMCrisisEvaluator는 evaluate 메서드를 사용하지만 복잡한 파라미터가 필요합니다
-                # 일단 기본 검증만 수행
-                test_result = self.crisis_detector is not None
-                results["crisis_detector"] = test_result is not None
-                logger.info(f"✓ Crisis detector validation: {'PASS' if results['crisis_detector'] else 'FAIL'}")
+                # SafetySystem 검증 - 간단한 테스트 메시지로 확인
+                test_result = self.safety_system.check_safety(
+                    text="테스트 메시지입니다",
+                    emotion_data=None,
+                    conversation_history=[]
+                )
+                results["crisis_detector"] = test_result is not None and "risk_level" in test_result
+                logger.info(f"✓ Safety system validation: {'PASS' if results['crisis_detector'] else 'FAIL'}")
             except Exception as e:
-                logger.error(f"✗ Crisis detector validation failed: {e}")
+                logger.error(f"✗ Safety system validation failed: {e}")
+        elif self.crisis_detector:
+            results["crisis_detector"] = True
+            logger.info("✓ Crisis detector validation: PASS (legacy mode)")
 
         # Validate emotion analyzer
         if self.emotion_analyzer:
@@ -455,17 +463,23 @@ class IntegratedMentalHealthSystem:
             crisis_detected = False
             crisis_level = 0
 
-            if self.crisis_detector:
+            if self.safety_system:
                 try:
                     history = conversation_history or []
-                    # LLMCrisisEvaluator는 evaluate 메서드를 사용하지만, 
-                    # SafetySystem을 통해 사용하는 것이 더 적절합니다.
-                    # 일단 간단한 위기 감지를 위해 emotion_result를 사용합니다.
-                    # 실제로는 SafetySystem을 초기화해야 하지만, 
-                    # 지금은 기본 응답만 반환하도록 합니다.
-                    crisis_result = None
-                    crisis_detected = False
-                    crisis_level = 0
+                    # SafetySystem을 사용한 종합 위기 감지
+                    crisis_result = self.safety_system.check_safety(
+                        text=user_message,
+                        emotion_data=emotion_result,
+                        conversation_history=history
+                    )
+
+                    # 결과 파싱
+                    risk_level = crisis_result.get("risk_level", RiskLevel.NONE)
+                    crisis_detected = crisis_result.get("requires_intervention", False)
+                    crisis_level = self._risk_level_to_int(risk_level)
+
+                    if crisis_detected:
+                        logger.warning(f"위기 감지됨: level={crisis_level}, risk={risk_level.value}")
                 except Exception as e:
                     logger.warning(f"Crisis detection failed: {e}")
                     crisis_result = None
@@ -716,6 +730,7 @@ class IntegratedMentalHealthSystem:
             "components": {
                 "llm": self.llm is not None,
                 "crisis_detector": self.crisis_detector is not None,
+                "safety_system": self.safety_system is not None,
                 "emotion_analyzer": self.emotion_analyzer is not None,
                 "assessment_manager": self.assessment_manager is not None,
                 "rag_system": self.rag_system is not None and self.rag_system.is_indexed,

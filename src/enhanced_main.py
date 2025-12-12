@@ -38,7 +38,7 @@ from .utils import (
 )
 
 # 신규 통합 모듈
-from .prompts import get_enhanced_prompt, ConversationPhase
+from .prompts import PromptTemplate, ConversationPhase
 from .conversation_state import ConversationStateManager, ConversationState
 from .response_validator import ResponseValidator, ValidationResult
 from .enhanced_rag import EnhancedRAGSystem
@@ -274,6 +274,10 @@ class EnhancedKoreanMentalHealthLLM:
     def _init_enhanced_components(self):
         """신규 컴포넌트 초기화"""
 
+        # 프롬프트 템플릿
+        persona_name = self.config.get("persona", {}).get("name", "마음이")
+        self.prompt_template = PromptTemplate(persona_name)
+
         # 대화 상태 관리자
         self.state_manager = ConversationStateManager()
 
@@ -284,8 +288,8 @@ class EnhancedKoreanMentalHealthLLM:
         self.rag_system = None
         if self.enable_rag:
             try:
-                from .rag_system import RAGSystem
-                base_rag = RAGSystem()
+                from .rag_system import MentalHealthRAG
+                base_rag = MentalHealthRAG()
                 self.rag_system = EnhancedRAGSystem(base_rag)
                 logger.info("RAG system initialized")
             except Exception as e:
@@ -398,15 +402,18 @@ class EnhancedKoreanMentalHealthLLM:
                         break
 
             # 6. 향상된 프롬프트 생성
-            phase = current_state.phase.value if current_state else "exploration"
-            prompt = get_enhanced_prompt(
-                user_input=user_input,
-                emotion=emotion_result.get("primary_emotion", "neutral"),
-                phase=phase,
-                crisis_level=int(crisis_result.get("severity", 0) * 5) if crisis_result else 0,
-                rag_context=rag_context,
+            crisis_level = int(crisis_result.get("severity", 0) * 5) if crisis_result else 0
+            prompt = self.prompt_template.get_enhanced_prompt(
+                user_message=user_input,
+                emotion_analysis={
+                    "primary_emotion": emotion_result.get("primary_emotion", "neutral"),
+                    "intensity": emotion_result.get("intensity", 5)
+                },
+                crisis_info={
+                    "risk_score": crisis_level / 5.0  # 0-1 범위로 변환
+                } if crisis_level > 0 else None,
                 conversation_history=self.conversation_history[-6:],  # 최근 3턴
-                experiment_variant=experiment_variant
+                rag_context=rag_context
             )
 
             # 7. 대화 이력 업데이트
