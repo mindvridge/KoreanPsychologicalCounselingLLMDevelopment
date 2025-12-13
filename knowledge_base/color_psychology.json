@@ -1,0 +1,438 @@
+{
+  "version": "1.0",
+  "description": "색상 심리학 지식 베이스 (그림 치료용)",
+  "disclaimer": "색상 해석은 참고용이며, 개인차와 문화적 맥락을 반드시 고려해야 합니다.",
+
+  "colors": {
+    "red": {
+      "korean_name": "빨강",
+      "hex_examples": ["#FF0000", "#DC143C", "#B22222"],
+      "psychological_associations": {
+        "emotions": ["열정", "분노", "사랑", "흥분", "에너지"],
+        "positive": ["생명력", "용기", "열정", "강인함", "활력"],
+        "negative": ["공격성", "분노", "위험", "긴장", "과잉"]
+      },
+      "energy_level": "high",
+      "temperature": "warm",
+      "korean_cultural_meaning": {
+        "traditional": "양(陽), 길함, 액막이, 기쁨",
+        "modern": "열정, 사랑, 경고",
+        "contexts": ["전통 혼례", "돌잔치", "명절"]
+      },
+      "developmental_associations": {
+        "children": "에너지 표현, 흥분, 때로는 분노",
+        "adults": "열정, 강렬한 감정, 활력 또는 분노"
+      },
+      "therapeutic_considerations": [
+        "과도한 사용: 분노, 공격성, 과각성 가능",
+        "적절한 사용: 에너지, 열정, 생명력",
+        "회피: 억압된 분노, 감정 억제 가능"
+      ],
+      "body_association": "심장, 혈액, 근육",
+      "chakra": "뿌리 차크라 (Root)",
+      "element": "불"
+    },
+
+    "orange": {
+      "korean_name": "주황",
+      "hex_examples": ["#FFA500", "#FF8C00", "#FF7F50"],
+      "psychological_associations": {
+        "emotions": ["활력", "따뜻함", "창의성", "사교성", "낙관"],
+        "positive": ["창의성", "열정", "따뜻함", "친근함", "재미"],
+        "negative": ["주의산만", "충동성", "과시"]
+      },
+      "energy_level": "medium-high",
+      "temperature": "warm",
+      "korean_cultural_meaning": {
+        "traditional": "승려의 색, 생명력, 가을",
+        "modern": "활력, 젊음, 에너지",
+        "contexts": ["사찰", "가을 풍경", "감귤"]
+      },
+      "developmental_associations": {
+        "children": "창의성, 사회성, 놀이",
+        "adults": "낙관, 사교성, 창의적 표현"
+      },
+      "therapeutic_considerations": [
+        "우울 시 활력 제공 가능",
+        "사회적 연결 욕구 표현",
+        "창의적 에너지"
+      ],
+      "body_association": "소화기관, 생식기",
+      "chakra": "천골 차크라 (Sacral)",
+      "element": "물/불"
+    },
+
+    "yellow": {
+      "korean_name": "노랑",
+      "hex_examples": ["#FFFF00", "#FFD700", "#FFA07A"],
+      "psychological_associations": {
+        "emotions": ["기쁨", "낙관", "지성", "주의", "불안"],
+        "positive": ["행복", "지혜", "낙관", "명랑", "창의성"],
+        "negative": ["불안", "비겁", "질투", "경고"]
+      },
+      "energy_level": "high",
+      "temperature": "warm",
+      "korean_cultural_meaning": {
+        "traditional": "중앙, 왕실, 권위, 오방색 중심",
+        "modern": "밝음, 희망, 주의",
+        "contexts": ["왕의 곤룡포", "은행잎", "가을"]
+      },
+      "developmental_associations": {
+        "children": "행복, 햇살, 긍정적 에너지",
+        "adults": "지적 추구, 낙관, 때로는 불안"
+      },
+      "therapeutic_considerations": [
+        "우울에 밝음 제공",
+        "과도한 사용: 불안, 초조",
+        "창의적 사고 자극"
+      ],
+      "body_association": "신경계, 소화기",
+      "chakra": "태양신경총 (Solar Plexus)",
+      "element": "불/공기"
+    },
+
+    "green": {
+      "korean_name": "초록",
+      "hex_examples": ["#008000", "#228B22", "#32CD32"],
+      "psychological_associations": {
+        "emotions": ["평화", "성장", "안정", "질투", "희망"],
+        "positive": ["성장", "균형", "조화", "자연", "치유"],
+        "negative": ["질투", "미성숙", "정체"]
+      },
+      "energy_level": "medium",
+      "temperature": "cool/neutral",
+      "korean_cultural_meaning": {
+        "traditional": "동쪽, 봄, 새싹, 생명",
+        "modern": "자연, 환경, 건강, 안전",
+        "contexts": ["새싹", "산", "숲"]
+      },
+      "developmental_associations": {
+        "children": "자연, 성장, 안전한 공간",
+        "adults": "균형, 회복, 자연 연결"
+      },
+      "therapeutic_considerations": [
+        "치유와 회복의 색",
+        "균형과 안정 추구",
+        "성장과 변화에 대한 욕구"
+      ],
+      "body_association": "심장, 폐",
+      "chakra": "심장 차크라 (Heart)",
+      "element": "나무/흙"
+    },
+
+    "blue": {
+      "korean_name": "파랑",
+      "hex_examples": ["#0000FF", "#4169E1", "#87CEEB"],
+      "psychological_associations": {
+        "emotions": ["평온", "슬픔", "신뢰", "차가움", "깊이"],
+        "positive": ["평화", "신뢰", "안정", "지혜", "충성"],
+        "negative": ["슬픔", "우울", "차가움", "거리감"]
+      },
+      "energy_level": "low-medium",
+      "temperature": "cool",
+      "korean_cultural_meaning": {
+        "traditional": "동쪽, 봄, 젊음, 청춘",
+        "modern": "신뢰, 안정, 시원함",
+        "contexts": ["청자", "청바지", "하늘/바다"]
+      },
+      "developmental_associations": {
+        "children": "하늘, 물, 때로는 슬픔",
+        "adults": "신뢰, 안정, 또는 우울/슬픔"
+      },
+      "therapeutic_considerations": [
+        "진정 효과",
+        "과도한 사용: 우울, 위축 가능",
+        "슬픔의 표현 수단",
+        "내면 탐색"
+      ],
+      "body_association": "목, 갑상선",
+      "chakra": "목 차크라 (Throat)",
+      "element": "물"
+    },
+
+    "indigo": {
+      "korean_name": "남색",
+      "hex_examples": ["#4B0082", "#000080", "#191970"],
+      "psychological_associations": {
+        "emotions": ["직관", "깊이", "내면", "신비"],
+        "positive": ["지혜", "직관", "영성", "통찰"],
+        "negative": ["고립", "우울", "현실 도피"]
+      },
+      "energy_level": "low",
+      "temperature": "cool",
+      "korean_cultural_meaning": {
+        "traditional": "선비의 색, 학문, 깊이",
+        "modern": "지성, 진지함",
+        "contexts": ["선비 복장", "한복 치마"]
+      },
+      "developmental_associations": {
+        "children": "잘 사용하지 않음, 사용 시 깊은 감정",
+        "adults": "내면 탐색, 영적 추구"
+      },
+      "therapeutic_considerations": [
+        "내면 탐색의 욕구",
+        "과도한 사용: 현실 회피 가능",
+        "직관과 통찰"
+      ],
+      "body_association": "눈, 뇌하수체",
+      "chakra": "제3의 눈 (Third Eye)",
+      "element": "공기/에테르"
+    },
+
+    "purple": {
+      "korean_name": "보라",
+      "hex_examples": ["#800080", "#9400D3", "#8B008B"],
+      "psychological_associations": {
+        "emotions": ["창의성", "신비", "영성", "슬픔", "고귀함"],
+        "positive": ["창의성", "영성", "상상력", "지혜", "고귀함"],
+        "negative": ["슬픔", "우울", "고립", "현실 도피"]
+      },
+      "energy_level": "medium",
+      "temperature": "cool",
+      "korean_cultural_meaning": {
+        "traditional": "고귀함, 왕족, 특별함",
+        "modern": "창의성, 신비, 고급스러움",
+        "contexts": ["특별한 행사", "왕실"]
+      },
+      "developmental_associations": {
+        "children": "상상력, 마법, 특별함의 느낌",
+        "adults": "창의성, 영성, 변화"
+      },
+      "therapeutic_considerations": [
+        "창의적 표현의 욕구",
+        "영적 탐색",
+        "변화/전환의 상징"
+      ],
+      "body_association": "뇌, 송과체",
+      "chakra": "왕관 차크라 (Crown)",
+      "element": "에테르"
+    },
+
+    "pink": {
+      "korean_name": "분홍",
+      "hex_examples": ["#FFC0CB", "#FF69B4", "#FFB6C1"],
+      "psychological_associations": {
+        "emotions": ["사랑", "부드러움", "돌봄", "순수", "낭만"],
+        "positive": ["사랑", "돌봄", "부드러움", "친밀감", "수용"],
+        "negative": ["미성숙", "약함", "의존성"]
+      },
+      "energy_level": "low-medium",
+      "temperature": "warm",
+      "korean_cultural_meaning": {
+        "traditional": "여성, 아이, 봄꽃",
+        "modern": "사랑, 로맨스, 귀여움",
+        "contexts": ["벚꽃", "아기용품"]
+      },
+      "developmental_associations": {
+        "children": "사랑, 엄마, 부드러움",
+        "adults": "돌봄, 자기애, 친밀감 욕구"
+      },
+      "therapeutic_considerations": [
+        "돌봄에 대한 욕구",
+        "자기 수용",
+        "부드러움과 친밀감"
+      ],
+      "body_association": "심장",
+      "chakra": "심장 차크라 (Heart)",
+      "element": "물/공기"
+    },
+
+    "brown": {
+      "korean_name": "갈색",
+      "hex_examples": ["#8B4513", "#A0522D", "#CD853F"],
+      "psychological_associations": {
+        "emotions": ["안정", "편안함", "따뜻함", "답답함"],
+        "positive": ["안정", "신뢰성", "자연", "따뜻함", "실용성"],
+        "negative": ["지루함", "무기력", "억압", "답답함"]
+      },
+      "energy_level": "low",
+      "temperature": "warm/neutral",
+      "korean_cultural_meaning": {
+        "traditional": "땅, 자연, 소박함",
+        "modern": "자연, 안정, 전통",
+        "contexts": ["흙", "나무", "전통 가옥"]
+      },
+      "developmental_associations": {
+        "children": "흙, 나무, 자연, 때로는 더러움",
+        "adults": "안정, 현실감, 실용성"
+      },
+      "therapeutic_considerations": [
+        "안정감의 욕구",
+        "현실에의 접촉 (그라운딩)",
+        "과도한 사용: 억압, 정체 가능"
+      ],
+      "body_association": "뿌리, 다리",
+      "chakra": "뿌리 차크라 (Root)",
+      "element": "흙"
+    },
+
+    "black": {
+      "korean_name": "검정",
+      "hex_examples": ["#000000", "#1C1C1C", "#2F2F2F"],
+      "psychological_associations": {
+        "emotions": ["힘", "슬픔", "신비", "두려움", "보호"],
+        "positive": ["힘", "권위", "우아함", "신비", "보호"],
+        "negative": ["슬픔", "우울", "공허", "억압", "죽음"]
+      },
+      "energy_level": "varies",
+      "temperature": "neutral/cool",
+      "korean_cultural_meaning": {
+        "traditional": "북쪽, 음(陰), 상복, 엄숙함",
+        "modern": "세련됨, 권위, 슬픔",
+        "contexts": ["장례", "정장", "서예"]
+      },
+      "developmental_associations": {
+        "children": "과도한 사용 주의 - 억압, 두려움, 분노 가능. 윤곽선 용도는 정상",
+        "adults": "힘, 보호, 또는 우울/공허"
+      },
+      "therapeutic_considerations": [
+        "윤곽선/강조로서의 정상적 사용",
+        "주요 색으로 과도 사용: 우울, 공허, 억압 가능",
+        "보호막으로서의 사용",
+        "내용과 맥락 고려 필요"
+      ],
+      "body_association": "뼈, 관절",
+      "chakra": "뿌리 차크라 (Root)",
+      "element": "흙/물"
+    },
+
+    "white": {
+      "korean_name": "흰색",
+      "hex_examples": ["#FFFFFF", "#F5F5F5", "#FFFAFA"],
+      "psychological_associations": {
+        "emotions": ["순수", "평화", "공허", "새로움", "거리감"],
+        "positive": ["순수", "깨끗함", "시작", "평화", "가능성"],
+        "negative": ["공허", "차가움", "고립", "회피"]
+      },
+      "energy_level": "neutral",
+      "temperature": "cool/neutral",
+      "korean_cultural_meaning": {
+        "traditional": "백의민족, 순수, 상복, 서쪽",
+        "modern": "깨끗함, 순수, 새로움",
+        "contexts": ["한복", "상복", "결혼"]
+      },
+      "developmental_associations": {
+        "children": "배경, 빈 공간, 때로는 회피",
+        "adults": "공간, 가능성, 또는 공허/회피"
+      },
+      "therapeutic_considerations": [
+        "과도한 빈 공간: 공허, 회피 가능",
+        "적절한 사용: 균형, 휴식",
+        "새로운 시작에 대한 욕구"
+      ],
+      "body_association": "전신",
+      "chakra": "왕관 차크라 (Crown)",
+      "element": "공기/빛"
+    },
+
+    "gray": {
+      "korean_name": "회색",
+      "hex_examples": ["#808080", "#A9A9A9", "#696969"],
+      "psychological_associations": {
+        "emotions": ["중립", "우울", "불확실", "무관심", "타협"],
+        "positive": ["균형", "중립", "실용성", "성숙"],
+        "negative": ["우울", "무기력", "불확실", "회피"]
+      },
+      "energy_level": "low",
+      "temperature": "neutral",
+      "korean_cultural_meaning": {
+        "traditional": "중립, 겸손",
+        "modern": "세련됨, 도시적, 중립",
+        "contexts": ["콘크리트", "현대 건축"]
+      },
+      "developmental_associations": {
+        "children": "잘 사용하지 않음, 과도 사용 시 주의",
+        "adults": "중립, 불확실, 또는 우울"
+      },
+      "therapeutic_considerations": [
+        "과도한 사용: 우울, 무기력, 감정 억제 가능",
+        "감정 표현의 어려움",
+        "결정 회피"
+      ],
+      "body_association": "피부, 신경",
+      "chakra": "-",
+      "element": "흙/공기"
+    }
+  },
+
+  "color_combinations": {
+    "warm_dominant": {
+      "colors": ["빨강", "주황", "노랑", "분홍"],
+      "interpretation": "외향적, 감정 표현적, 에너지가 높음",
+      "considerations": "과각성 가능, 감정 조절 어려움 가능"
+    },
+    "cool_dominant": {
+      "colors": ["파랑", "초록", "보라", "남색"],
+      "interpretation": "내향적, 감정 억제적, 차분함 또는 우울",
+      "considerations": "감정 억압 가능, 내면 탐색 경향"
+    },
+    "balanced": {
+      "interpretation": "정서적 균형, 다양한 감정 표현",
+      "positive_sign": true
+    },
+    "monochromatic": {
+      "interpretation": "특정 감정/상태에 집중, 정서적 단조로움 가능",
+      "considerations": "우울, 정서 제한 가능. 맥락 확인 필요"
+    },
+    "black_heavy": {
+      "interpretation": "억압, 우울, 분노, 또는 강한 감정의 표현",
+      "considerations": "내용과 맥락을 함께 고려"
+    },
+    "rainbow_varied": {
+      "interpretation": "정서적 풍부함, 또는 정서적 혼란",
+      "considerations": "조직화 정도 확인"
+    }
+  },
+
+  "developmental_norms": {
+    "ages_2_4": {
+      "typical_colors": ["빨강", "파랑", "노랑", "초록"],
+      "usage_pattern": "탐색적, 감각적 즐거움 위주",
+      "notes": "색상 선택보다 탐색 과정이 중요"
+    },
+    "ages_5_7": {
+      "typical_colors": ["밝은 색 선호", "좋아하는 색 반복"],
+      "usage_pattern": "주제와 색 매칭 시작",
+      "notes": "하늘-파랑, 태양-노랑 등 사실적 매칭"
+    },
+    "ages_8_12": {
+      "typical_colors": ["다양해짐", "현실적 선택"],
+      "usage_pattern": "의미 부여 시작",
+      "notes": "성별 고정관념 영향 받을 수 있음"
+    },
+    "adolescents": {
+      "typical_colors": ["검정 선호 증가", "대비 강한 색"],
+      "usage_pattern": "정체성 표현, 감정 강조",
+      "notes": "검정 사용 증가는 발달적으로 정상일 수 있음"
+    },
+    "adults": {
+      "typical_colors": ["개인차 큼", "선호도 고정됨"],
+      "usage_pattern": "의미 있는 선택",
+      "notes": "개인사와 문화적 맥락 고려"
+    }
+  },
+
+  "clinical_guidelines": {
+    "interpretation_principles": [
+      "단일 요소로 판단하지 않기",
+      "전체 맥락 고려하기",
+      "발달 단계 고려하기",
+      "문화적 배경 고려하기",
+      "개인의 색상 연상 직접 확인하기",
+      "반복 패턴 관찰하기"
+    ],
+    "questions_to_ask": [
+      "이 색을 선택한 이유가 있어요?",
+      "이 색을 보면 어떤 느낌이 들어요?",
+      "좋아하는 색이에요? 싫어하는 색이에요?",
+      "이 색은 무엇을 떠올리게 하나요?"
+    ],
+    "cautions": [
+      "색상만으로 진단하지 않기",
+      "과잉해석 주의",
+      "문화적 차이 인식",
+      "개인차 존중",
+      "맥락 없이 해석하지 않기"
+    ]
+  }
+}
