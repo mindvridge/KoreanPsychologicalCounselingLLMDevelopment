@@ -1,4 +1,7 @@
 {
+  "version": "2.0",
+  "last_updated": "2025-12-13",
+
   "cultural_concepts": [
     {
       "id": "jeong_001",
@@ -101,8 +104,406 @@
         "변화에는 시간이 필요해요.",
         "빨리 나아지려 하지 않으셔도 돼요."
       ]
+    },
+    {
+      "id": "collectivism_001",
+      "concept": "집단주의 (집단 중심)",
+      "romanization": "Jipdanjuui",
+      "description": "개인보다 집단(가족, 회사, 학교)을 우선시하는 가치관",
+      "counseling_implications": [
+        "개인의 욕구 표현에 죄책감 느낄 수 있음",
+        "'나'보다 '우리'를 먼저 생각하는 습관",
+        "집단에서 튀면 안 된다는 압박",
+        "개인의 행복 추구에 대한 갈등"
+      ],
+      "helpful_phrases": [
+        "개인의 필요를 챙기는 것도 중요해요.",
+        "나를 돌보는 것이 이기적인 게 아니에요.",
+        "가끔은 자신을 먼저 생각해도 괜찮아요."
+      ]
+    },
+    {
+      "id": "comparison_001",
+      "concept": "비교 문화",
+      "romanization": "Bigyo Munhwa",
+      "description": "끊임없이 타인과 비교하는 사회적 경향",
+      "counseling_implications": [
+        "상대적 박탈감과 열등감",
+        "SNS로 인한 비교 심화",
+        "성취와 외모에 대한 과도한 비교",
+        "자존감 저하의 주요 원인"
+      ],
+      "helpful_phrases": [
+        "비교는 끝이 없어요. 자신의 속도를 존중해 주세요.",
+        "남과 비교하면 힘들어지기 쉬워요.",
+        "자신만의 기준으로 살아도 괜찮아요."
+      ]
+    },
+    {
+      "id": "success_pressure_001",
+      "concept": "성공 압박",
+      "romanization": "Seonggong Appak",
+      "description": "사회적 성공(학벌, 직장, 재정)에 대한 강한 압박",
+      "counseling_implications": [
+        "실패에 대한 극도의 두려움",
+        "완벽주의 성향 발달",
+        "번아웃 위험성",
+        "자기 가치를 성취로만 측정"
+      ],
+      "helpful_phrases": [
+        "성공만이 전부가 아니에요.",
+        "실패해도 괜찮아요. 그것도 경험이에요.",
+        "자신에게 조금 더 관대해져도 돼요."
+      ]
+    },
+    {
+      "id": "marriage_pressure_001",
+      "concept": "결혼/출산 압박",
+      "romanization": "Gyeolhon Appak",
+      "description": "적절한 나이에 결혼하고 아이를 낳아야 한다는 사회적 기대",
+      "counseling_implications": [
+        "명절 스트레스 (결혼/출산 질문)",
+        "비혼/비출산 선택에 대한 죄책감",
+        "나이에 대한 압박감",
+        "부모님 실망시키기 두려움"
+      ],
+      "helpful_phrases": [
+        "결혼 여부와 관계없이 가치 있는 삶을 살 수 있어요.",
+        "자신의 선택을 존중해 주세요.",
+        "남들의 기준에 맞출 필요 없어요."
+      ]
     }
   ],
+
+  "indirect_expressions": {
+    "description": "한국어 간접 표현 해석 가이드 (심리상담 맥락)",
+    "expressions": [
+      {
+        "expression": "그냥",
+        "literal": "Just / Nothing",
+        "hidden_meaning": "말하기 어려운 깊은 감정이 있을 수 있음",
+        "response_guide": "부드럽게 더 탐색 ('그냥' 뒤에 숨은 감정 찾기)",
+        "example_responses": [
+          "'그냥'이라고 하셨지만, 그 안에 담긴 마음이 있을 것 같아요.",
+          "말씀하시기 어려운 부분이 있으신 것 같아요. 편하실 때 이야기해 주세요."
+        ]
+      },
+      {
+        "expression": "별거 아닌데",
+        "literal": "It's nothing",
+        "hidden_meaning": "실제로는 중요한 문제일 가능성이 높음",
+        "response_guide": "중요성 인정 + 탐색 허용",
+        "example_responses": [
+          "별거 아니라고 하셨지만, 마음에 걸리시는 것 같아요.",
+          "작은 일처럼 말씀하셨지만, 감정이 느껴지네요."
+        ]
+      },
+      {
+        "expression": "괜찮아요",
+        "literal": "I'm fine",
+        "hidden_meaning": "괜찮지 않을 수 있음. 체면이나 배려로 인한 표현",
+        "response_guide": "한 번 더 확인 + 감정 공간 제공",
+        "example_responses": [
+          "괜찮다고 하셨지만, 혹시 더 이야기하고 싶으신 부분이 있으신가요?",
+          "정말 괜찮으신 건지, 조금 더 들어봐도 될까요?"
+        ]
+      },
+      {
+        "expression": "모르겠어요",
+        "literal": "I don't know",
+        "hidden_meaning": "감정 접촉이 어려움 / 회피 / 혼란",
+        "response_guide": "판단 없이 탐색 도움",
+        "example_responses": [
+          "지금은 잘 모르시겠을 수 있어요. 천천히 느껴봐도 돼요.",
+          "복잡한 마음이 뒤섞여 있을 수 있어요."
+        ]
+      },
+      {
+        "expression": "제가 이상한 건가요?",
+        "literal": "Am I weird?",
+        "hidden_meaning": "정상화 필요 / 수치심 존재 / 불안",
+        "response_guide": "보편화 + 타당화 + 안심시키기",
+        "example_responses": [
+          "전혀 이상하지 않아요. 그런 상황에서 그렇게 느끼시는 건 자연스러워요.",
+          "많은 분들이 비슷한 경험을 하세요. 이상한 게 아니에요."
+        ]
+      },
+      {
+        "expression": "어떻게 해야 해요?",
+        "literal": "What should I do?",
+        "hidden_meaning": "답보다 공감을 원할 수 있음 / 무력감 표현",
+        "response_guide": "먼저 충분히 경청 후 탐색",
+        "example_responses": [
+          "답을 찾고 싶으시군요. 먼저 지금 느끼시는 감정에 대해 더 이야기해 볼까요?",
+          "해결책을 찾고 싶은 마음이 크시군요. 어떤 점이 가장 힘드세요?"
+        ]
+      },
+      {
+        "expression": "누가 그러는데",
+        "literal": "Someone said...",
+        "hidden_meaning": "자신의 생각이지만 직접 말하기 어려움",
+        "response_guide": "본인 의견인지 확인 + 안전한 공간 제공",
+        "example_responses": [
+          "그렇게 생각하시는 부분이 있으신 것 같아요.",
+          "혹시 그게 본인 생각이신가요? 편하게 말씀해 주셔도 돼요."
+        ]
+      },
+      {
+        "expression": "그럴 수도 있죠",
+        "literal": "Could be",
+        "hidden_meaning": "동의하지 않지만 직접 말하기 어려움",
+        "response_guide": "진짜 생각 탐색",
+        "example_responses": [
+          "혹시 다른 생각이 있으신 것 같은데, 말씀해 주시겠어요?",
+          "솔직한 생각을 나눠주셔도 괜찮아요."
+        ]
+      },
+      {
+        "expression": "제가 너무 예민한 건가요?",
+        "literal": "Am I being too sensitive?",
+        "hidden_meaning": "자기 감정을 무시당한 경험 / 타당화 필요",
+        "response_guide": "감정 타당화 + 자기 신뢰 회복",
+        "example_responses": [
+          "예민한 게 아니에요. 그 감정을 느끼시는 건 당연해요.",
+          "자신의 감정을 존중해 주세요. 중요한 신호예요."
+        ]
+      },
+      {
+        "expression": "그냥 피곤해서 그래요",
+        "literal": "I'm just tired",
+        "hidden_meaning": "피로 뒤에 숨은 감정적 어려움 가능",
+        "response_guide": "피로의 원인과 감정 탐색",
+        "example_responses": [
+          "요즘 많이 피곤하시군요. 어떤 것들이 지치게 하나요?",
+          "피곤함 말고도 다른 감정이 있으신 것 같기도 해요."
+        ]
+      }
+    ]
+  },
+
+  "life_stage_contexts": {
+    "description": "한국 사회 생애주기별 주요 스트레스 요인",
+    "stages": [
+      {
+        "stage": "10대 (청소년)",
+        "primary_stressors": [
+          "입시 스트레스 (수능, 내신)",
+          "학업 성적 압박",
+          "또래 관계 (왕따, 따돌림)",
+          "부모 기대와 갈등",
+          "자아 정체성 혼란",
+          "SNS/온라인 스트레스"
+        ],
+        "cultural_pressures": [
+          "명문대 진학 압박",
+          "부모의 학업 간섭",
+          "학원/과외 일정",
+          "비교 문화 (성적, 외모)"
+        ],
+        "helpful_approaches": [
+          "학업 외 정체성 탐색",
+          "또래 관계 지지",
+          "부모와의 소통 개선",
+          "자기 수용 격려"
+        ]
+      },
+      {
+        "stage": "20대 (청년)",
+        "primary_stressors": [
+          "취업 스트레스",
+          "N포세대 좌절감",
+          "경제적 어려움 (등록금, 주거비)",
+          "연애/결혼 압박 시작",
+          "자아 탐색과 혼란",
+          "미래 불확실성"
+        ],
+        "cultural_pressures": [
+          "스펙 쌓기 압박",
+          "남들과의 비교",
+          "부모 독립 vs 의존",
+          "또래와의 생애 비교"
+        ],
+        "helpful_approaches": [
+          "작은 성취 인정",
+          "자기만의 속도 존중",
+          "불확실성 수용",
+          "사회적 지지체계 구축"
+        ]
+      },
+      {
+        "stage": "30대",
+        "primary_stressors": [
+          "직장 내 경쟁과 압박",
+          "결혼/출산 압박 심화",
+          "양육과 일의 균형",
+          "커리어 방향 고민",
+          "부모 부양 시작",
+          "경제적 부담 (주택, 육아)"
+        ],
+        "cultural_pressures": [
+          "결혼 적령기 압박",
+          "집 마련 압박",
+          "육아 역할 기대",
+          "직장 내 성공 압박"
+        ],
+        "helpful_approaches": [
+          "워라밸 설정",
+          "완벽주의 내려놓기",
+          "파트너와의 소통",
+          "자기 돌봄 시간 확보"
+        ]
+      },
+      {
+        "stage": "40-50대 (중년)",
+        "primary_stressors": [
+          "직장 내 위기 (고용 불안, 은퇴)",
+          "자녀 교육비 부담",
+          "부모 돌봄 부담 증가",
+          "갱년기 변화",
+          "중년 위기 (정체성, 의미)",
+          "부부 관계 권태기"
+        ],
+        "cultural_pressures": [
+          "가장 역할 압박",
+          "명퇴/조기퇴직 불안",
+          "자녀 성공 압박",
+          "노후 준비 압박"
+        ],
+        "helpful_approaches": [
+          "제2의 인생 탐색",
+          "부부 관계 재점검",
+          "건강 관리 강조",
+          "의미 찾기 지원"
+        ]
+      },
+      {
+        "stage": "60대 이상 (노년)",
+        "primary_stressors": [
+          "은퇴 후 정체성 상실",
+          "건강 문제",
+          "배우자 상실/사별",
+          "사회적 고립과 외로움",
+          "경제적 불안",
+          "자녀와의 갈등/소외감"
+        ],
+        "cultural_pressures": [
+          "젊은 세대와의 단절감",
+          "디지털 소외",
+          "무용감",
+          "자녀 의존에 대한 체면"
+        ],
+        "helpful_approaches": [
+          "사회적 연결 유지",
+          "의미 있는 활동 찾기",
+          "건강 관리 동기부여",
+          "삶의 회고와 수용"
+        ]
+      }
+    ]
+  },
+
+  "workplace_contexts": {
+    "description": "한국 직장 문화 관련 스트레스 요인",
+    "issues": [
+      {
+        "issue": "위계 문화",
+        "description": "엄격한 상하관계와 연공서열",
+        "stressors": [
+          "상사 눈치 보기",
+          "의견 표현 어려움",
+          "부당한 지시 거절 어려움",
+          "회식 문화 압박"
+        ],
+        "helpful_phrases": [
+          "직장에서의 관계가 힘드시군요.",
+          "상하관계에서 느끼는 답답함이 있으시네요.",
+          "의견을 말하기 어려우셨겠어요."
+        ]
+      },
+      {
+        "issue": "과로 문화",
+        "description": "야근, 주말 근무가 당연시되는 문화",
+        "stressors": [
+          "만성 피로",
+          "가정-직장 갈등",
+          "건강 악화",
+          "번아웃"
+        ],
+        "helpful_phrases": [
+          "정말 많이 일하고 계시네요.",
+          "쉬는 시간이 부족하셨겠어요.",
+          "몸과 마음이 지쳐가고 있는 것 같아요."
+        ]
+      },
+      {
+        "issue": "갑질/직장 내 괴롭힘",
+        "description": "권력 남용과 부당한 대우",
+        "stressors": [
+          "모욕감",
+          "무력감",
+          "분노 억압",
+          "퇴사 고민"
+        ],
+        "helpful_phrases": [
+          "정말 힘든 상황이시네요.",
+          "그런 대우를 받으시면 화가 나는 게 당연해요.",
+          "혼자 감당하기 어려우셨을 것 같아요."
+        ]
+      }
+    ]
+  },
+
+  "family_contexts": {
+    "description": "한국 가족 관계 관련 이슈",
+    "issues": [
+      {
+        "issue": "고부/장서 갈등",
+        "description": "시어머니-며느리, 장모-사위 간 갈등",
+        "common_triggers": [
+          "경계 침범",
+          "육아 개입",
+          "명절 스트레스",
+          "배우자 편들기 부재"
+        ],
+        "helpful_phrases": [
+          "가족 관계에서 많이 힘드셨군요.",
+          "경계를 지키고 싶으신 마음이 이해돼요.",
+          "두 분 사이에서 어려우셨겠어요."
+        ]
+      },
+      {
+        "issue": "부모 기대 부담",
+        "description": "부모의 과도한 기대와 자녀의 부담",
+        "common_triggers": [
+          "진로/직업 간섭",
+          "결혼/출산 압박",
+          "형제 비교",
+          "효도 강요"
+        ],
+        "helpful_phrases": [
+          "부모님의 기대가 무거우시군요.",
+          "자신의 삶을 살고 싶으신 마음과 부모님을 실망시키고 싶지 않은 마음 사이에서 힘드시겠어요.",
+          "부모님 기대와 자신의 원하는 것이 다를 때 갈등이 생기죠."
+        ]
+      },
+      {
+        "issue": "부모 돌봄 부담",
+        "description": "노부모 돌봄에 대한 스트레스",
+        "common_triggers": [
+          "시간적/경제적 부담",
+          "형제간 역할 갈등",
+          "죄책감",
+          "자기 삶 포기감"
+        ],
+        "helpful_phrases": [
+          "부모님을 돌보시느라 많이 힘드시겠어요.",
+          "돌봄의 무게가 느껴지네요.",
+          "자신을 돌볼 시간도 필요해요."
+        ]
+      }
+    ]
+  },
+
   "communication_styles": {
     "formal_speech": {
       "description": "한국어의 존댓말 사용",
@@ -116,8 +517,65 @@
     "indirect_communication": {
       "description": "직접적 표현보다 간접적 표현 선호",
       "counseling_tip": "은유나 이야기를 활용한 접근이 효과적일 수 있음"
+    },
+    "silence_meaning": {
+      "description": "침묵의 의미",
+      "interpretations": [
+        "감정 처리 중",
+        "말하기 어려운 내용",
+        "상담자에 대한 신뢰 부족",
+        "동의하지 않음"
+      ],
+      "response": "침묵을 존중하고 기다려 주되, 부드럽게 확인"
     }
   },
+
+  "modern_issues": {
+    "description": "현대 한국 사회 특유의 심리적 이슈",
+    "issues": [
+      {
+        "issue": "N포세대",
+        "description": "연애, 결혼, 출산, 내 집 마련 등을 포기한 세대",
+        "emotional_impact": [
+          "좌절감",
+          "미래 희망 상실",
+          "사회에 대한 분노",
+          "무력감"
+        ]
+      },
+      {
+        "issue": "번아웃",
+        "description": "과로와 스트레스로 인한 심신 소진",
+        "emotional_impact": [
+          "무기력",
+          "의욕 상실",
+          "냉소적 태도",
+          "신체 증상"
+        ]
+      },
+      {
+        "issue": "디지털 과의존",
+        "description": "스마트폰, SNS, 게임 중독",
+        "emotional_impact": [
+          "현실 회피",
+          "대인관계 어려움",
+          "수면 문제",
+          "비교로 인한 우울"
+        ]
+      },
+      {
+        "issue": "외모 압박",
+        "description": "외모 지상주의 문화로 인한 스트레스",
+        "emotional_impact": [
+          "자존감 저하",
+          "섭식 문제",
+          "성형 강박",
+          "사회적 위축"
+        ]
+      }
+    ]
+  },
+
   "crisis_resources": {
     "suicide_prevention": {
       "name": "자살예방상담전화",
@@ -137,6 +595,16 @@
     "child_abuse": {
       "name": "아동학대신고",
       "number": "112",
+      "hours": "24시간"
+    },
+    "youth": {
+      "name": "청소년전화",
+      "number": "1388",
+      "hours": "24시간"
+    },
+    "elderly": {
+      "name": "노인학대신고",
+      "number": "1577-1389",
       "hours": "24시간"
     }
   }

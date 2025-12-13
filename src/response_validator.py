@@ -1,6 +1,6 @@
 """
-응답 검증 시스템 (Response Validator)
-LLM 응답 품질 검증 및 일관성 보장
+응답 검증 시스템 v2.0 (Enhanced Response Validator)
+LLM 응답 품질 검증, 자동 수정 및 일관성 보장
 
 기능:
 - 공감 표현 존재 여부 검증
@@ -9,6 +9,10 @@ LLM 응답 품질 검증 및 일관성 보장
 - 반복 응답 감지
 - 응답 길이 적절성 검사
 - 위기 대응 적절성 검증
+- 질문 개수 최적화 검증 (NEW)
+- 자동 응답 개선/보완 (NEW)
+- 멀티스테이지 검증 파이프라인 (NEW)
+- 실시간 품질 점수 트래킹 (NEW)
 """
 
 import re
@@ -65,14 +69,15 @@ class ResponseValidator:
         self.strict_mode = strict_mode
         self.min_score = 70 if strict_mode else 50
 
-        # 검증 체크리스트
+        # 검증 체크리스트 (NEW: question_count 추가)
         self.checks = [
             ("empathy", self._check_empathy_presence, 25),
             ("safety", self._check_safety_language, 20),
             ("cultural", self._check_cultural_sensitivity, 15),
             ("length", self._check_length_appropriateness, 10),
             ("repetition", self._check_repetition, 15),
-            ("prohibited", self._check_prohibited_phrases, 15),
+            ("prohibited", self._check_prohibited_phrases, 10),
+            ("question_count", self._check_question_count, 5),  # NEW
         ]
 
         # 공감 표현 마커
@@ -453,6 +458,48 @@ class ResponseValidator:
         # SequenceMatcher를 사용한 유사도 계산
         return difflib.SequenceMatcher(None, text1, text2).ratio()
 
+    def _check_question_count(
+        self,
+        response: str,
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """질문 개수 최적화 검증 (NEW)"""
+        # 물음표로 끝나는 문장 개수
+        questions = re.findall(r'[^.!?]*\?', response)
+        question_count = len(questions)
+
+        # 이상적인 질문 개수: 1개
+        # 허용 범위: 0-2개
+        if question_count == 1:
+            return {
+                "passed": True,
+                "issue": None,
+                "severity": 0,
+                "details": {"question_count": question_count, "optimal": True}
+            }
+        elif question_count == 0:
+            return {
+                "passed": True,  # 질문 없어도 허용
+                "issue": None,
+                "severity": 0,
+                "details": {"question_count": question_count, "suggestion": "탐색 질문 추가 권장"}
+            }
+        elif question_count == 2:
+            return {
+                "passed": True,
+                "issue": None,
+                "severity": 0,
+                "details": {"question_count": question_count, "warning": "질문이 2개입니다"}
+            }
+        else:
+            return {
+                "passed": False,
+                "issue": f"질문이 {question_count}개로 너무 많음 (권장: 1개)",
+                "suggestion": "한 번에 하나의 질문만 하세요",
+                "severity": 0.8,
+                "details": {"question_count": question_count, "questions": questions}
+            }
+
     def suggest_improvements(
         self,
         response: str,
@@ -557,6 +604,401 @@ class ResponseRegenerator:
     def should_regenerate(self, validation_result: ValidationResult) -> bool:
         """재생성 필요 여부 판단"""
         return validation_result.needs_regeneration
+
+
+# =============================================================================
+# NEW: 자동 응답 개선 시스템 (Auto Response Enhancer)
+# =============================================================================
+
+class ResponseEnhancer:
+    """
+    응답 자동 개선 시스템 (NEW)
+
+    검증 결과를 바탕으로 응답을 자동으로 보완/수정합니다.
+    LLM 재생성 없이 규칙 기반으로 빠르게 개선합니다.
+    """
+
+    def __init__(self):
+        # 공감 표현 템플릿
+        self.empathy_templates = {
+            "우울": [
+                "많이 힘드셨겠어요.",
+                "마음이 무거우셨을 것 같아요.",
+                "그런 감정을 느끼시는 건 자연스러운 거예요."
+            ],
+            "불안": [
+                "많이 걱정되셨겠어요.",
+                "불안한 마음이 크셨을 것 같아요.",
+                "그런 상황에서 걱정이 드시는 건 당연해요."
+            ],
+            "분노": [
+                "정말 화가 나셨겠어요.",
+                "그런 상황이라면 누구나 화가 날 수 있어요.",
+                "답답하고 속상하셨겠어요."
+            ],
+            "스트레스": [
+                "많이 지치셨겠어요.",
+                "버거우셨을 것 같아요.",
+                "힘든 상황에서 잘 버텨오셨네요."
+            ],
+            "default": [
+                "말씀 들으니 마음이 쓰이네요.",
+                "그런 마음이 드셨군요.",
+                "충분히 그러실 수 있어요."
+            ]
+        }
+
+        # 피상적 표현 → 공감적 표현 변환 맵
+        self.replacement_map = {
+            "힘내세요": "많이 힘드셨겠어요",
+            "힘내요": "지금 많이 지치셨을 것 같아요",
+            "괜찮아질 거예요": "지금 이 순간이 힘드시죠",
+            "다 잘 될 거예요": "지금 느끼시는 감정이 중요해요",
+            "화이팅": "함께 이야기 나눠요",
+            "파이팅": "천천히 얘기해 주세요",
+            "걱정 마세요": "걱정이 되시는 거 이해해요",
+            "별거 아니에요": "그런 마음이 드셨군요",
+        }
+
+        # 질문 템플릿
+        self.follow_up_questions = {
+            "exploration": [
+                "조금 더 자세히 이야기해 주실 수 있을까요?",
+                "어떤 부분이 특히 힘드셨어요?",
+                "그때 어떤 마음이 드셨어요?"
+            ],
+            "emotion": [
+                "그 상황에서 어떤 감정이 드셨어요?",
+                "지금은 어떤 마음이세요?",
+                "그때 어떤 느낌이셨어요?"
+            ],
+            "support": [
+                "주변에 이야기 나눌 분이 계신가요?",
+                "평소에 마음이 힘들 때 어떻게 하세요?",
+                "조금이라도 도움이 되는 것이 있을까요?"
+            ]
+        }
+
+        logger.info("ResponseEnhancer initialized")
+
+    def enhance(
+        self,
+        response: str,
+        validation_result: ValidationResult,
+        context: Dict[str, Any]
+    ) -> Tuple[str, List[str]]:
+        """
+        응답 자동 개선
+
+        Args:
+            response: 원본 응답
+            validation_result: 검증 결과
+            context: 컨텍스트
+
+        Returns:
+            Tuple[str, List[str]]: (개선된 응답, 적용된 개선 목록)
+        """
+        enhanced = response
+        applied_enhancements = []
+
+        # 1. 피상적 표현 대체
+        for old_phrase, new_phrase in self.replacement_map.items():
+            if old_phrase in enhanced:
+                enhanced = enhanced.replace(old_phrase, new_phrase)
+                applied_enhancements.append(f"표현 대체: '{old_phrase}' → '{new_phrase}'")
+
+        # 2. 공감 표현 부족시 추가
+        details = validation_result.details.get("empathy", {})
+        if details.get("passed") == False or details.get("details", {}).get("empathy_score", 0) < 2:
+            emotion = context.get("emotion", "default")
+            templates = self.empathy_templates.get(emotion, self.empathy_templates["default"])
+            empathy_phrase = templates[0]
+
+            # 응답 시작 부분에 공감 표현 추가
+            if not any(marker in enhanced[:50] for marker in ["군요", "겠어요", "네요"]):
+                enhanced = empathy_phrase + " " + enhanced
+                applied_enhancements.append(f"공감 표현 추가: '{empathy_phrase}'")
+
+        # 3. 질문 없을 때 추가 (탐색 단계인 경우)
+        details = validation_result.details.get("question_count", {})
+        question_count = details.get("details", {}).get("question_count", 0)
+        turn_count = context.get("turn_count", 0)
+
+        if question_count == 0 and turn_count < 8:  # 탐색 단계
+            if "?" not in enhanced:
+                questions = self.follow_up_questions["exploration"]
+                enhanced = enhanced.rstrip() + " " + questions[0]
+                applied_enhancements.append("탐색 질문 추가")
+
+        # 4. 너무 긴 응답 축약
+        if len(enhanced) > 400:
+            sentences = re.split(r'(?<=[.!?])\s+', enhanced)
+            if len(sentences) > 4:
+                enhanced = ' '.join(sentences[:4])
+                applied_enhancements.append("응답 길이 축약 (4문장)")
+
+        return enhanced, applied_enhancements
+
+    def add_crisis_resources(self, response: str) -> str:
+        """위기 자원 정보 추가"""
+        crisis_info = "\n\n🆘 전문 도움이 필요하시면:\n- 자살예방상담전화: 1393 (24시간)\n- 정신건강위기상담전화: 1577-0199"
+
+        if "1393" not in response and "1577-0199" not in response:
+            return response + crisis_info
+        return response
+
+
+# =============================================================================
+# NEW: 멀티스테이지 검증 파이프라인 (Multi-Stage Validation Pipeline)
+# =============================================================================
+
+class ValidationPipeline:
+    """
+    멀티스테이지 검증 파이프라인 (NEW)
+
+    [응답 생성] → [1차 검증] → [자동 수정] → [2차 검증] → [출력]
+
+    자동 수정으로 해결 가능한 문제는 재생성 없이 처리합니다.
+    """
+
+    def __init__(self, strict_mode: bool = False, auto_enhance: bool = True):
+        """
+        초기화
+
+        Args:
+            strict_mode: 엄격 검증 모드
+            auto_enhance: 자동 개선 활성화
+        """
+        self.validator = ResponseValidator(strict_mode=strict_mode)
+        self.enhancer = ResponseEnhancer() if auto_enhance else None
+        self.auto_enhance = auto_enhance
+
+        # 품질 추적
+        self.quality_history: List[Dict[str, Any]] = []
+        self.total_processed = 0
+        self.auto_enhanced_count = 0
+        self.regeneration_count = 0
+
+        logger.info(f"ValidationPipeline initialized (strict={strict_mode}, auto_enhance={auto_enhance})")
+
+    def process(
+        self,
+        response: str,
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        응답 처리 파이프라인
+
+        Args:
+            response: LLM 응답
+            context: 컨텍스트
+
+        Returns:
+            Dict: {
+                "response": 최종 응답,
+                "original_response": 원본 응답,
+                "validation": 검증 결과,
+                "enhanced": 개선 여부,
+                "enhancements": 적용된 개선 목록,
+                "needs_regeneration": 재생성 필요 여부,
+                "quality_score": 품질 점수
+            }
+        """
+        self.total_processed += 1
+        result = {
+            "original_response": response,
+            "enhanced": False,
+            "enhancements": [],
+            "needs_regeneration": False
+        }
+
+        # 1차 검증
+        validation_result = self.validator.validate(response, context)
+        result["validation_stage1"] = {
+            "level": validation_result.level.value,
+            "score": validation_result.score,
+            "issues": validation_result.issues
+        }
+
+        # 위기 상황 특별 처리
+        if context.get("crisis_detected"):
+            if self.enhancer:
+                response = self.enhancer.add_crisis_resources(response)
+                result["enhancements"].append("위기 자원 정보 추가")
+
+        # 2. 자동 개선 시도 (PASS가 아닌 경우)
+        if self.auto_enhance and self.enhancer and validation_result.level != ValidationLevel.PASS:
+            enhanced_response, enhancements = self.enhancer.enhance(
+                response, validation_result, context
+            )
+
+            if enhancements:
+                self.auto_enhanced_count += 1
+                result["enhanced"] = True
+                result["enhancements"] = enhancements
+                response = enhanced_response
+
+                # 2차 검증
+                validation_result = self.validator.validate(response, context)
+                result["validation_stage2"] = {
+                    "level": validation_result.level.value,
+                    "score": validation_result.score,
+                    "issues": validation_result.issues
+                }
+
+        # 3. 최종 결정
+        result["response"] = response
+        result["validation"] = validation_result
+        result["quality_score"] = validation_result.score
+        result["needs_regeneration"] = validation_result.needs_regeneration
+
+        if result["needs_regeneration"]:
+            self.regeneration_count += 1
+
+        # 품질 기록
+        self._track_quality(result)
+
+        return result
+
+    def _track_quality(self, result: Dict[str, Any]):
+        """품질 추적"""
+        self.quality_history.append({
+            "score": result["quality_score"],
+            "enhanced": result["enhanced"],
+            "needs_regeneration": result["needs_regeneration"],
+            "issues_count": len(result.get("validation_stage1", {}).get("issues", []))
+        })
+
+        # 최근 100개만 유지
+        if len(self.quality_history) > 100:
+            self.quality_history = self.quality_history[-100:]
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """품질 통계 반환"""
+        if not self.quality_history:
+            return {"message": "No data yet"}
+
+        scores = [h["score"] for h in self.quality_history]
+
+        return {
+            "total_processed": self.total_processed,
+            "auto_enhanced_count": self.auto_enhanced_count,
+            "auto_enhance_rate": self.auto_enhanced_count / max(1, self.total_processed),
+            "regeneration_count": self.regeneration_count,
+            "regeneration_rate": self.regeneration_count / max(1, self.total_processed),
+            "average_score": sum(scores) / len(scores),
+            "min_score": min(scores),
+            "max_score": max(scores),
+            "score_distribution": {
+                "excellent (90+)": sum(1 for s in scores if s >= 90),
+                "good (70-89)": sum(1 for s in scores if 70 <= s < 90),
+                "fair (50-69)": sum(1 for s in scores if 50 <= s < 70),
+                "poor (<50)": sum(1 for s in scores if s < 50)
+            }
+        }
+
+    def get_recent_issues(self, n: int = 10) -> List[Dict[str, Any]]:
+        """최근 이슈 목록"""
+        issues_list = []
+        for h in self.quality_history[-n:]:
+            if h.get("issues_count", 0) > 0:
+                issues_list.append(h)
+        return issues_list
+
+
+# =============================================================================
+# NEW: 품질 메트릭 추적기 (Quality Metrics Tracker)
+# =============================================================================
+
+class QualityMetricsTracker:
+    """
+    품질 메트릭 실시간 추적기 (NEW)
+
+    응답 품질을 시간대별로 추적하고 트렌드를 분석합니다.
+    """
+
+    def __init__(self):
+        from datetime import datetime
+        from collections import defaultdict
+
+        self.metrics = defaultdict(list)
+        self.hourly_scores = defaultdict(list)
+        self.issue_frequency = Counter()
+        self.start_time = datetime.now()
+
+    def record(
+        self,
+        score: float,
+        issues: List[str],
+        metadata: Optional[Dict] = None
+    ):
+        """메트릭 기록"""
+        from datetime import datetime
+
+        timestamp = datetime.now()
+        hour_key = timestamp.strftime("%Y-%m-%d %H:00")
+
+        self.metrics["scores"].append(score)
+        self.metrics["timestamps"].append(timestamp)
+        self.hourly_scores[hour_key].append(score)
+
+        for issue in issues:
+            self.issue_frequency[issue] += 1
+
+        if metadata:
+            for key, value in metadata.items():
+                self.metrics[key].append(value)
+
+    def get_trend(self, hours: int = 24) -> Dict[str, Any]:
+        """시간대별 트렌드"""
+        from datetime import datetime, timedelta
+
+        cutoff = datetime.now() - timedelta(hours=hours)
+
+        recent_hours = {}
+        for hour_key, scores in self.hourly_scores.items():
+            try:
+                hour_dt = datetime.strptime(hour_key, "%Y-%m-%d %H:00")
+                if hour_dt >= cutoff:
+                    recent_hours[hour_key] = {
+                        "average": sum(scores) / len(scores),
+                        "count": len(scores)
+                    }
+            except:
+                pass
+
+        return {
+            "hourly_trend": recent_hours,
+            "top_issues": self.issue_frequency.most_common(5),
+            "total_records": len(self.metrics["scores"])
+        }
+
+    def get_summary(self) -> Dict[str, Any]:
+        """전체 요약"""
+        scores = self.metrics["scores"]
+        if not scores:
+            return {"message": "No data"}
+
+        return {
+            "total_responses": len(scores),
+            "average_score": sum(scores) / len(scores),
+            "score_std": self._std(scores),
+            "top_issues": self.issue_frequency.most_common(10),
+            "quality_distribution": {
+                "excellent": sum(1 for s in scores if s >= 90) / len(scores) * 100,
+                "good": sum(1 for s in scores if 70 <= s < 90) / len(scores) * 100,
+                "fair": sum(1 for s in scores if 50 <= s < 70) / len(scores) * 100,
+                "poor": sum(1 for s in scores if s < 50) / len(scores) * 100
+            }
+        }
+
+    def _std(self, values: List[float]) -> float:
+        """표준편차 계산"""
+        if len(values) < 2:
+            return 0.0
+        mean = sum(values) / len(values)
+        variance = sum((x - mean) ** 2 for x in values) / len(values)
+        return variance ** 0.5
 
 
 # 편의 함수
