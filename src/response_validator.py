@@ -1,5 +1,5 @@
 """
-응답 검증 시스템 v2.0 (Enhanced Response Validator)
+응답 검증 시스템 v2.1 (Enhanced Response Validator)
 LLM 응답 품질 검증, 자동 수정 및 일관성 보장
 
 기능:
@@ -9,10 +9,11 @@ LLM 응답 품질 검증, 자동 수정 및 일관성 보장
 - 반복 응답 감지
 - 응답 길이 적절성 검사
 - 위기 대응 적절성 검증
-- 질문 개수 최적화 검증 (NEW)
-- 자동 응답 개선/보완 (NEW)
-- 멀티스테이지 검증 파이프라인 (NEW)
-- 실시간 품질 점수 트래킹 (NEW)
+- 질문 개수 최적화 검증
+- 자동 응답 개선/보완
+- 멀티스테이지 검증 파이프라인
+- 실시간 품질 점수 트래킹
+- 한국어 자연스러움 후처리 (NEW in v2.1)
 """
 
 import re
@@ -22,6 +23,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 from collections import Counter
 import difflib
+
+# Korean naturalizer for natural Korean responses
+try:
+    from korean_naturalizer import ResponsePolisher
+    NATURALIZER_AVAILABLE = True
+except ImportError:
+    NATURALIZER_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -761,25 +769,41 @@ class ValidationPipeline:
     자동 수정으로 해결 가능한 문제는 재생성 없이 처리합니다.
     """
 
-    def __init__(self, strict_mode: bool = False, auto_enhance: bool = True):
+    def __init__(
+        self,
+        strict_mode: bool = False,
+        auto_enhance: bool = True,
+        naturalize: bool = True
+    ):
         """
         초기화
 
         Args:
             strict_mode: 엄격 검증 모드
             auto_enhance: 자동 개선 활성화
+            naturalize: 한국어 자연스러움 후처리 활성화
         """
         self.validator = ResponseValidator(strict_mode=strict_mode)
         self.enhancer = ResponseEnhancer() if auto_enhance else None
         self.auto_enhance = auto_enhance
 
+        # 한국어 자연스러움 처리기
+        self.naturalizer = None
+        self.naturalize = naturalize
+        if naturalize and NATURALIZER_AVAILABLE:
+            self.naturalizer = ResponsePolisher()
+            logger.info("Korean naturalizer enabled")
+        elif naturalize and not NATURALIZER_AVAILABLE:
+            logger.warning("Korean naturalizer not available - module not found")
+
         # 품질 추적
         self.quality_history: List[Dict[str, Any]] = []
         self.total_processed = 0
         self.auto_enhanced_count = 0
+        self.naturalized_count = 0
         self.regeneration_count = 0
 
-        logger.info(f"ValidationPipeline initialized (strict={strict_mode}, auto_enhance={auto_enhance})")
+        logger.info(f"ValidationPipeline initialized (strict={strict_mode}, auto_enhance={auto_enhance}, naturalize={naturalize})")
 
     def process(
         self,
@@ -846,7 +870,34 @@ class ValidationPipeline:
                     "issues": validation_result.issues
                 }
 
-        # 3. 최종 결정
+        # 3. 한국어 자연스러움 처리 (최종 단계)
+        naturalness_info = {}
+        if self.naturalizer and not validation_result.needs_regeneration:
+            # 감정 컨텍스트 추출
+            emotion = context.get("detected_emotion") or context.get("emotion")
+            turn_count = context.get("turn_count", 0)
+
+            polish_result = self.naturalizer.polish(
+                response,
+                emotion=emotion,
+                turn_count=turn_count
+            )
+
+            if polish_result["changes"]:
+                self.naturalized_count += 1
+                response = polish_result["response"]
+                naturalness_info = {
+                    "applied": True,
+                    "naturalness_score": polish_result["naturalness_score"],
+                    "changes": polish_result["changes"]
+                }
+                result["enhancements"].extend([f"자연스러움: {c}" for c in polish_result["changes"]])
+            else:
+                naturalness_info = {"applied": False, "naturalness_score": polish_result["naturalness_score"]}
+
+        result["naturalization"] = naturalness_info
+
+        # 4. 최종 결정
         result["response"] = response
         result["validation"] = validation_result
         result["quality_score"] = validation_result.score
@@ -862,9 +913,13 @@ class ValidationPipeline:
 
     def _track_quality(self, result: Dict[str, Any]):
         """품질 추적"""
+        naturalness_score = result.get("naturalization", {}).get("naturalness_score")
+
         self.quality_history.append({
             "score": result["quality_score"],
             "enhanced": result["enhanced"],
+            "naturalized": result.get("naturalization", {}).get("applied", False),
+            "naturalness_score": naturalness_score,
             "needs_regeneration": result["needs_regeneration"],
             "issues_count": len(result.get("validation_stage1", {}).get("issues", []))
         })
@@ -879,11 +934,14 @@ class ValidationPipeline:
             return {"message": "No data yet"}
 
         scores = [h["score"] for h in self.quality_history]
+        naturalness_scores = [h["naturalness_score"] for h in self.quality_history if h.get("naturalness_score")]
 
-        return {
+        stats = {
             "total_processed": self.total_processed,
             "auto_enhanced_count": self.auto_enhanced_count,
             "auto_enhance_rate": self.auto_enhanced_count / max(1, self.total_processed),
+            "naturalized_count": self.naturalized_count,
+            "naturalize_rate": self.naturalized_count / max(1, self.total_processed),
             "regeneration_count": self.regeneration_count,
             "regeneration_rate": self.regeneration_count / max(1, self.total_processed),
             "average_score": sum(scores) / len(scores),
@@ -896,6 +954,16 @@ class ValidationPipeline:
                 "poor (<50)": sum(1 for s in scores if s < 50)
             }
         }
+
+        # 자연스러움 점수 통계 추가
+        if naturalness_scores:
+            stats["naturalness"] = {
+                "average": sum(naturalness_scores) / len(naturalness_scores),
+                "min": min(naturalness_scores),
+                "max": max(naturalness_scores)
+            }
+
+        return stats
 
     def get_recent_issues(self, n: int = 10) -> List[Dict[str, Any]]:
         """최근 이슈 목록"""
