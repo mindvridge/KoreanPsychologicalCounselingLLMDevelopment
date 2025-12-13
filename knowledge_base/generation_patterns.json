@@ -1,0 +1,539 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "description": "한국 세대별 언어 패턴, 주요 고민, 상담 접근법",
+    "last_updated": "2025-12-13"
+  },
+  "generations": [
+    {
+      "id": "gen_10s",
+      "name": "10대 (청소년)",
+      "age_range": "13-19세",
+      "characteristics": {
+        "communication_style": "짧고 직접적, 신조어/줄임말 빈번",
+        "digital_native": true,
+        "help_seeking_barrier": "부모에게 알려질까 걱정, 상담 자체에 대한 거부감"
+      },
+      "common_expressions": [
+        {"expression": "현타 옴", "meaning": "현실 자각이 와서 우울함"},
+        {"expression": "멘붕", "meaning": "멘탈 붕괴, 정신적 충격"},
+        {"expression": "ㅇㅇ해서 빡침", "meaning": "화가 남"},
+        {"expression": "존나/개 우울", "meaning": "매우 우울함 (비속어 주의)"},
+        {"expression": "TMI인데", "meaning": "너무 많은 정보지만 (털어놓고 싶을 때)"},
+        {"expression": "아 진짜 ㅋㅋ", "meaning": "자조적 웃음, 답답함"},
+        {"expression": "왜 사는지 모르겠음", "meaning": "삶의 의미 상실감"},
+        {"expression": "다 귀찮아", "meaning": "무기력, 의욕 저하"},
+        {"expression": "인싸/아싸", "meaning": "사회적 소속감 관련"},
+        {"expression": "찐따", "meaning": "자기비하 표현 (주의 필요)"}
+      ],
+      "main_concerns": [
+        {
+          "issue": "학업 스트레스",
+          "prevalence": "매우 높음",
+          "details": "입시 압박, 성적 비교, 학원 스케줄, 수면 부족",
+          "helpful_questions": [
+            "요즘 공부 때문에 많이 힘드니?",
+            "하루에 잠은 몇 시간 정도 자?",
+            "쉬는 시간에는 뭘 하면서 쉬어?"
+          ]
+        },
+        {
+          "issue": "또래 관계",
+          "prevalence": "높음",
+          "details": "왕따, 카톡 단톡방 갈등, SNS 비교, FOMO",
+          "helpful_questions": [
+            "학교에서 편하게 얘기할 수 있는 친구가 있어?",
+            "SNS 보면서 기분이 안 좋아질 때가 있어?",
+            "혹시 학교에서 힘들게 하는 애들이 있어?"
+          ]
+        },
+        {
+          "issue": "가족 갈등",
+          "prevalence": "높음",
+          "details": "부모 잔소리, 기대 압박, 비교, 소통 부재",
+          "helpful_questions": [
+            "집에서 부모님이랑 대화 많이 해?",
+            "부모님이 네 얘기를 들어주는 편이야?",
+            "집에 있으면 어떤 기분이 들어?"
+          ]
+        },
+        {
+          "issue": "정체성 혼란",
+          "prevalence": "중간",
+          "details": "성정체성, 진로, 자아상",
+          "helpful_questions": [
+            "요즘 '나는 누구지?' 이런 생각 해본 적 있어?",
+            "나중에 어떤 사람이 되고 싶어?",
+            "있는 그대로의 네가 괜찮다고 느껴져?"
+          ]
+        },
+        {
+          "issue": "외모 불안",
+          "prevalence": "높음",
+          "details": "SNS 비교, 성형 고민, 다이어트 강박",
+          "helpful_questions": [
+            "거울 볼 때 기분이 어때?",
+            "외모 때문에 스트레스받은 적 있어?",
+            "주변에서 외모에 대해 뭐라고 해?"
+          ]
+        }
+      ],
+      "counseling_approach": {
+        "tone": "친근하고 비판단적, 또래같은 느낌",
+        "do": [
+          "비밀보장 강조하기",
+          "그들의 언어로 공감하기",
+          "작은 성공 경험 인정하기",
+          "선택권과 자율성 존중하기"
+        ],
+        "dont": [
+          "훈계하거나 설교하기",
+          "부모 편들기",
+          "비속어에 과민반응하기",
+          "어른스럽게 행동하라고 요구하기"
+        ]
+      }
+    },
+    {
+      "id": "gen_20s",
+      "name": "20대 (청년)",
+      "age_range": "20-29세",
+      "characteristics": {
+        "communication_style": "솔직하고 직설적, 자기표현 적극적",
+        "digital_native": true,
+        "help_seeking_barrier": "비용 부담, 시간 부족, 혼자 해결해야 한다는 생각"
+      },
+      "common_expressions": [
+        {"expression": "번아웃", "meaning": "심각한 탈진, 소진"},
+        {"expression": "갓생", "meaning": "열심히 사는 삶 (강박적일 수 있음)"},
+        {"expression": "N포세대", "meaning": "여러 가지를 포기한 세대"},
+        {"expression": "사회생활 힘들다", "meaning": "직장/인간관계 스트레스"},
+        {"expression": "미래가 안 보여", "meaning": "불확실성에 대한 불안"},
+        {"expression": "어른이 되기 싫다", "meaning": "책임감에 대한 부담"},
+        {"expression": "혼자가 편해", "meaning": "사회적 철회, 관계 피로"},
+        {"expression": "돈이 없어서", "meaning": "경제적 스트레스"},
+        {"expression": "취준생/백수", "meaning": "취업 관련 자괴감"},
+        {"expression": "결혼 압박", "meaning": "가족의 결혼 기대"}
+      ],
+      "main_concerns": [
+        {
+          "issue": "취업/진로",
+          "prevalence": "매우 높음",
+          "details": "구직 실패, 스펙 경쟁, 비정규직, 적성 불일치",
+          "helpful_questions": [
+            "취업 준비하면서 가장 힘든 점이 뭐예요?",
+            "원래 하고 싶었던 일이 있었나요?",
+            "주변에서 압박을 많이 받으시나요?"
+          ]
+        },
+        {
+          "issue": "경제적 어려움",
+          "prevalence": "높음",
+          "details": "학자금 대출, 알바 병행, 독립 부담, 저축 불가",
+          "helpful_questions": [
+            "경제적인 부분이 많이 신경 쓰이시죠?",
+            "돈 때문에 포기한 것들이 있나요?",
+            "도움받을 수 있는 곳을 알아보신 적 있나요?"
+          ]
+        },
+        {
+          "issue": "관계 이슈",
+          "prevalence": "높음",
+          "details": "연애 스트레스, 이별, 친구 관계 변화, 외로움",
+          "helpful_questions": [
+            "요즘 관계에서 힘든 점이 있나요?",
+            "마음을 털어놓을 수 있는 사람이 있나요?",
+            "혼자 있는 시간이 괜찮으신가요, 힘드신가요?"
+          ]
+        },
+        {
+          "issue": "자존감/정체성",
+          "prevalence": "높음",
+          "details": "비교의식, SNS 피로, 성취 강박, 불안정한 자아상",
+          "helpful_questions": [
+            "스스로에 대해 어떻게 생각하세요?",
+            "남들과 비교하게 될 때가 많나요?",
+            "있는 그대로의 나를 좋아하시나요?"
+          ]
+        },
+        {
+          "issue": "번아웃/무기력",
+          "prevalence": "높음",
+          "details": "과도한 노력 후 탈진, 의미 상실, 동기 저하",
+          "helpful_questions": [
+            "요즘 에너지가 많이 없으신 것 같아요.",
+            "언제부터 이렇게 지치셨나요?",
+            "쉬는 게 어렵게 느껴지시나요?"
+          ]
+        }
+      ],
+      "counseling_approach": {
+        "tone": "존중하되 친근하게, 동등한 위치에서",
+        "do": [
+          "그들의 현실적 어려움 인정하기",
+          "작은 실천 가능한 목표 설정하기",
+          "강점과 자원 발견하기",
+          "사회구조적 문제도 인정하기"
+        ],
+        "dont": [
+          "'노력하면 된다' 식의 조언",
+          "기성세대와 비교하기",
+          "결혼/취업 재촉하기",
+          "문제를 개인 탓으로만 돌리기"
+        ]
+      }
+    },
+    {
+      "id": "gen_30s",
+      "name": "30대",
+      "age_range": "30-39세",
+      "characteristics": {
+        "communication_style": "조심스럽고 신중, 상황 설명 상세",
+        "digital_native": false,
+        "help_seeking_barrier": "체면, 시간 부족, 가족 우선시"
+      },
+      "common_expressions": [
+        {"expression": "샌드위치 세대", "meaning": "부모와 자녀 사이에서 양쪽 돌봄"},
+        {"expression": "워라밸", "meaning": "일과 삶의 균형 (이상 vs 현실)"},
+        {"expression": "육아 우울", "meaning": "육아로 인한 정서적 어려움"},
+        {"expression": "경력 단절", "meaning": "출산/육아로 인한 커리어 중단"},
+        {"expression": "내 시간이 없어", "meaning": "자기 돌봄 부재"},
+        {"expression": "결혼이 현실이 되니까", "meaning": "결혼 생활의 어려움"},
+        {"expression": "직장 상사 때문에", "meaning": "직장 내 갈등"},
+        {"expression": "대출금", "meaning": "주거비용 스트레스"},
+        {"expression": "맘카페", "meaning": "육아 커뮤니티 (비교 스트레스)"},
+        {"expression": "노산 걱정", "meaning": "임신/출산 관련 불안"}
+      ],
+      "main_concerns": [
+        {
+          "issue": "육아 스트레스",
+          "prevalence": "매우 높음",
+          "details": "수면 부족, 아이 발달 걱정, 육아 갈등, 죄책감",
+          "helpful_questions": [
+            "육아하시면서 가장 힘든 점이 뭔가요?",
+            "쉴 수 있는 시간이 있으신가요?",
+            "배우자분과 육아를 나누시나요?"
+          ]
+        },
+        {
+          "issue": "부부/파트너 갈등",
+          "prevalence": "높음",
+          "details": "소통 부재, 역할 분담, 성생활, 가치관 차이",
+          "helpful_questions": [
+            "배우자분과 대화는 잘 되시나요?",
+            "갈등이 생기면 어떻게 해결하시나요?",
+            "결혼 전과 지금 달라진 점이 있으신가요?"
+          ]
+        },
+        {
+          "issue": "직장 스트레스",
+          "prevalence": "높음",
+          "details": "중간관리자 고충, 성과 압박, 이직 고민, 갑질",
+          "helpful_questions": [
+            "직장에서 어떤 점이 가장 스트레스인가요?",
+            "상사나 동료와의 관계는 어떠신가요?",
+            "이 일을 계속하고 싶으신가요?"
+          ]
+        },
+        {
+          "issue": "정체성 위기",
+          "prevalence": "중간",
+          "details": "엄마/아빠로서의 정체성만 남음, 꿈 포기",
+          "helpful_questions": [
+            "요즘 '나'로서 살고 계신 것 같으세요?",
+            "예전에 하고 싶었던 일이 있으셨나요?",
+            "나만의 시간을 가지실 때가 있나요?"
+          ]
+        },
+        {
+          "issue": "경제적 압박",
+          "prevalence": "높음",
+          "details": "주택 대출, 교육비, 노후 준비 동시 부담",
+          "helpful_questions": [
+            "경제적인 부담이 크시죠?",
+            "돈 문제가 다른 스트레스에도 영향을 주나요?",
+            "이 부분에서 어떤 도움이 필요하신가요?"
+          ]
+        }
+      ],
+      "counseling_approach": {
+        "tone": "공감적이고 지지적, 현실 인정",
+        "do": [
+          "다양한 역할 수행의 어려움 인정하기",
+          "완벽하지 않아도 된다는 메시지 전달",
+          "자기 돌봄의 중요성 강조하기",
+          "구체적인 자원과 지원 정보 제공하기"
+        ],
+        "dont": [
+          "더 감사해야 한다고 말하기",
+          "부모 역할을 우선시하라고 강요하기",
+          "성역할 고정관념 강화하기",
+          "모든 문제를 개인이 해결하라고 하기"
+        ]
+      }
+    },
+    {
+      "id": "gen_40s",
+      "name": "40대",
+      "age_range": "40-49세",
+      "characteristics": {
+        "communication_style": "체계적이고 논리적, 감정 표현에 서툼",
+        "digital_native": false,
+        "help_seeking_barrier": "체면, '이 나이에 무슨 상담', 가장 책임감"
+      },
+      "common_expressions": [
+        {"expression": "갱년기", "meaning": "호르몬 변화로 인한 심리적 변화"},
+        {"expression": "중년의 위기", "meaning": "삶의 의미, 성취 재점검"},
+        {"expression": "사춘기 자녀", "meaning": "자녀와의 갈등"},
+        {"expression": "부모님 건강", "meaning": "노부모 돌봄 스트레스"},
+        {"expression": "회사에서 밀려나는 느낌", "meaning": "직장 내 위치 불안"},
+        {"expression": "체력이 예전 같지 않아", "meaning": "신체적 변화에 대한 인식"},
+        {"expression": "허무해", "meaning": "성취 후 공허함"},
+        {"expression": "내 인생 이게 다인가", "meaning": "실존적 질문"}
+      ],
+      "main_concerns": [
+        {
+          "issue": "중년의 위기",
+          "prevalence": "높음",
+          "details": "인생 재평가, 미달성 목표, 시간 유한성 인식",
+          "helpful_questions": [
+            "요즘 삶에 대해 어떤 생각이 드세요?",
+            "예전에 꿈꾸던 것들이 이루어졌나요?",
+            "앞으로 어떻게 살고 싶으세요?"
+          ]
+        },
+        {
+          "issue": "자녀 관계",
+          "prevalence": "높음",
+          "details": "사춘기 갈등, 진로 걱정, 세대차이, 소통 단절",
+          "helpful_questions": [
+            "자녀분과 대화가 잘 되시나요?",
+            "자녀가 요즘 어떤지 알고 계세요?",
+            "부모로서 어떤 점이 어려우신가요?"
+          ]
+        },
+        {
+          "issue": "부모 돌봄",
+          "prevalence": "중간",
+          "details": "노부모 병간호, 형제간 갈등, 죄책감, 경제적 부담",
+          "helpful_questions": [
+            "부모님 돌보시면서 힘드신 점이 있으시죠?",
+            "도움받을 수 있는 분이 계세요?",
+            "본인 건강은 챙기고 계세요?"
+          ]
+        },
+        {
+          "issue": "건강 불안",
+          "prevalence": "중간",
+          "details": "체력 저하, 만성질환, 갱년기 증상",
+          "helpful_questions": [
+            "몸이 예전 같지 않다고 느끼시나요?",
+            "건강 검진은 받고 계세요?",
+            "갱년기 증상이 있으신가요?"
+          ]
+        },
+        {
+          "issue": "직장 불안",
+          "prevalence": "높음",
+          "details": "구조조정 위협, 젊은 세대와 경쟁, 퇴직 준비",
+          "helpful_questions": [
+            "직장에서 위치가 불안하게 느껴지시나요?",
+            "은퇴 후에 대해 생각해 보셨나요?",
+            "일 외에 하고 싶은 것이 있으세요?"
+          ]
+        }
+      ],
+      "counseling_approach": {
+        "tone": "존중하고 격식 있게, 전문성 강조",
+        "do": [
+          "삶의 경험과 지혜 인정하기",
+          "감정 표현을 격려하기",
+          "새로운 시작의 가능성 열어두기",
+          "신체적 변화와 심리적 연결 설명하기"
+        ],
+        "dont": [
+          "'나이가 있으니까' 식의 표현",
+          "변화가 어렵다고 가정하기",
+          "젊은 세대와 비교하기",
+          "감정 표현을 약하다고 여기게 하기"
+        ]
+      }
+    },
+    {
+      "id": "gen_50s",
+      "name": "50대",
+      "age_range": "50-59세",
+      "characteristics": {
+        "communication_style": "조심스럽고 간접적, 비유 사용",
+        "digital_native": false,
+        "help_seeking_barrier": "상담에 대한 편견, '약한 사람이 받는 것'"
+      },
+      "common_expressions": [
+        {"expression": "명예퇴직", "meaning": "비자발적 조기 퇴직"},
+        {"expression": "빈둥지 증후군", "meaning": "자녀 독립 후 공허함"},
+        {"expression": "황혼 이혼", "meaning": "자녀 성장 후 이혼 고려"},
+        {"expression": "노후 준비", "meaning": "은퇴 후 삶에 대한 불안"},
+        {"expression": "소외감", "meaning": "사회적 역할 감소"},
+        {"expression": "세상이 많이 변했다", "meaning": "변화에 대한 적응 어려움"},
+        {"expression": "자녀한테 짐이 되기 싫어", "meaning": "독립성에 대한 갈망"},
+        {"expression": "건강이 재산이다", "meaning": "건강 중시"}
+      ],
+      "main_concerns": [
+        {
+          "issue": "은퇴/퇴직",
+          "prevalence": "매우 높음",
+          "details": "정체성 상실, 사회적 역할 감소, 경제적 불안",
+          "helpful_questions": [
+            "퇴직 후 어떻게 지내고 계세요?",
+            "일 안 하시니까 어떠세요?",
+            "하루를 어떻게 보내시나요?"
+          ]
+        },
+        {
+          "issue": "빈둥지 증후군",
+          "prevalence": "높음",
+          "details": "자녀 독립 후 공허함, 역할 상실, 부부만 남음",
+          "helpful_questions": [
+            "자녀분들이 독립하시고 어떠세요?",
+            "요즘 뭘 하면서 시간을 보내세요?",
+            "배우자분과는 어떻게 지내세요?"
+          ]
+        },
+        {
+          "issue": "부부 관계",
+          "prevalence": "높음",
+          "details": "권태기, 대화 부재, 각자 생활, 이혼 고민",
+          "helpful_questions": [
+            "배우자분과 함께하는 시간이 있으세요?",
+            "결혼 생활에 만족하시나요?",
+            "속마음을 나누시나요?"
+          ]
+        },
+        {
+          "issue": "건강 문제",
+          "prevalence": "높음",
+          "details": "만성질환, 암 공포, 체력 저하, 약물 복용",
+          "helpful_questions": [
+            "건강은 어떠세요?",
+            "몸이 아프시면서 마음도 힘드시죠?",
+            "병원 다니시면서 어떠세요?"
+          ]
+        },
+        {
+          "issue": "외로움/고립",
+          "prevalence": "중간",
+          "details": "사회적 관계 감소, 친구 상실, 디지털 소외",
+          "helpful_questions": [
+            "요즘 만나는 분들이 계세요?",
+            "외롭다고 느껴지실 때가 있나요?",
+            "취미 활동 같은 건 하고 계세요?"
+          ]
+        }
+      ],
+      "counseling_approach": {
+        "tone": "존경하고 예의 바르게, 경험 존중",
+        "do": [
+          "삶의 지혜와 경험 존중하기",
+          "서서히 신뢰 쌓아가기",
+          "구체적인 사회 자원 연결하기",
+          "신체 건강과 정신 건강 연결 설명하기"
+        ],
+        "dont": [
+          "'어르신' 이라고 부르기 (상황에 따라)",
+          "디지털 사용을 강요하기",
+          "변화를 못한다고 가정하기",
+          "자녀에게 의지하라고 조언하기"
+        ]
+      }
+    },
+    {
+      "id": "gen_60plus",
+      "name": "60대 이상 (노년)",
+      "age_range": "60세 이상",
+      "characteristics": {
+        "communication_style": "이야기 형식, 과거 회상, 간접 표현",
+        "digital_native": false,
+        "help_seeking_barrier": "세대 관념, 자존심, 가족에게 알리기 싫음"
+      },
+      "common_expressions": [
+        {"expression": "옛날에는", "meaning": "과거와 현재 비교"},
+        {"expression": "몸이 말을 안 들어", "meaning": "신체 기능 저하"},
+        {"expression": "누가 먼저 갈지", "meaning": "죽음에 대한 인식"},
+        {"expression": "자식한테 손 안 벌리고 싶어", "meaning": "경제적 독립 욕구"},
+        {"expression": "늙으면 서러워", "meaning": "노년의 서러움"},
+        {"expression": "그때 그랬어야 했는데", "meaning": "인생 회한"},
+        {"expression": "외로워", "meaning": "고독감"},
+        {"expression": "소용없어", "meaning": "무력감, 우울"}
+      ],
+      "main_concerns": [
+        {
+          "issue": "건강 악화",
+          "prevalence": "매우 높음",
+          "details": "만성질환, 통증, 거동 불편, 감각 저하",
+          "helpful_questions": [
+            "몸은 좀 어떠세요?",
+            "아프신 데가 많으시죠?",
+            "일상생활은 괜찮으세요?"
+          ]
+        },
+        {
+          "issue": "배우자 상실/사별",
+          "prevalence": "높음",
+          "details": "애도, 외로움, 삶의 의미 상실, 일상 변화",
+          "helpful_questions": [
+            "많이 보고 싶으시죠?",
+            "혼자 지내시는 게 어떠세요?",
+            "함께하셨던 시간 이야기해 주실래요?"
+          ]
+        },
+        {
+          "issue": "고독과 소외",
+          "prevalence": "높음",
+          "details": "사회적 단절, 디지털 소외, 대화 상대 부재",
+          "helpful_questions": [
+            "요즘 누구랑 이야기하세요?",
+            "자녀분들은 자주 연락하나요?",
+            "외로우실 때 어떻게 하세요?"
+          ]
+        },
+        {
+          "issue": "우울/무력감",
+          "prevalence": "높음",
+          "details": "역할 상실, 의존성 증가, 삶의 의미 질문",
+          "helpful_questions": [
+            "요즘 즐거운 일이 있으세요?",
+            "사는 게 재미없다고 느껴지세요?",
+            "밥맛은 있으세요?"
+          ]
+        },
+        {
+          "issue": "죽음 불안/죽음 준비",
+          "prevalence": "중간",
+          "details": "죽음 공포, 삶 정리, 유산, 장례 준비",
+          "helpful_questions": [
+            "앞으로에 대해 생각해 보신 적 있으세요?",
+            "정리하고 싶은 것들이 있으세요?",
+            "하고 싶은 말씀이 있으신가요?"
+          ]
+        }
+      ],
+      "counseling_approach": {
+        "tone": "공손하고 따뜻하게, 경청 중심",
+        "do": [
+          "인생 이야기를 경청하기",
+          "삶의 의미와 가치 탐색하기",
+          "실질적인 도움(복지 서비스) 연결하기",
+          "가족과의 소통 돕기",
+          "회상 치료 활용하기"
+        ],
+        "dont": [
+          "서두르거나 재촉하기",
+          "기술 사용을 강요하기",
+          "자녀 탓을 하기",
+          "'나이가 있으시니' 식의 말",
+          "죽음 주제를 피하기만 하기"
+        ]
+      }
+    }
+  ]
+}
