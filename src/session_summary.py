@@ -729,9 +729,36 @@ class SessionSummaryManager:
                 with open(self.storage_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     for session_id, summary_data in data.items():
-                        # 간단히 dict로 저장/로드 (실제로는 더 정교한 직렬화 필요)
-                        pass  # TODO: 구현
-                logger.info(f"Loaded {len(data)} session summaries")
+                        # 저장된 데이터에서 SessionSummary 복원
+                        try:
+                            summary = SessionSummary(
+                                session_id=summary_data.get("session_id", session_id),
+                                user_id=summary_data.get("user_id", "unknown"),
+                                start_time=datetime.fromisoformat(summary_data["start_time"]),
+                                end_time=datetime.fromisoformat(summary_data["end_time"]),
+                                duration_minutes=summary_data.get("duration_minutes", 0),
+                                brief_summary=summary_data.get("brief_summary", ""),
+                                detailed_summary=summary_data.get("detailed_summary", ""),
+                                main_topics=summary_data.get("main_topics", []),
+                                key_points=summary_data.get("key_points", []),
+                                user_concerns=summary_data.get("user_concerns", []),
+                                counselor_suggestions=summary_data.get("counselor_suggestions", []),
+                                emotional_journey=summary_data.get("emotional_journey", []),
+                                dominant_emotion=summary_data.get("dominant_emotion", "중립"),
+                                emotional_shift=summary_data.get("emotional_shift", "stable"),
+                                insights=summary_data.get("insights", []),
+                                patterns_identified=summary_data.get("patterns_identified", []),
+                                homework=summary_data.get("homework", []),
+                                next_session_suggestions=summary_data.get("next_session_suggestions", []),
+                                message_count=summary_data.get("message_count", 0),
+                                user_message_count=summary_data.get("user_message_count", 0),
+                                avg_response_time=summary_data.get("avg_response_time")
+                            )
+                            self.summaries[session_id] = summary
+                        except (KeyError, ValueError) as e:
+                            logger.warning(f"Failed to load summary {session_id}: {e}")
+                            continue
+                logger.info(f"Loaded {len(self.summaries)} session summaries")
         except Exception as e:
             logger.error(f"Failed to load summaries: {e}")
 

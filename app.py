@@ -32,8 +32,19 @@ try:
     HAS_NEW_SYSTEMS = True
 except ImportError:
     HAS_NEW_SYSTEMS = False
-    logger = logging.getLogger(__name__)
-    logger.warning("New counseling systems not available, using basic mode")
+    logging.getLogger(__name__).warning("New counseling systems not available, using basic mode")
+
+# 음성 시스템 (STT/TTS)
+HAS_VOICE_SYSTEMS = False
+whisper_stt = None
+zonos_tts = None
+
+try:
+    from src.stt import WhisperSTT
+    from src.tts import ZonosTTS, SpeechConfig
+    HAS_VOICE_SYSTEMS = True
+except ImportError:
+    logging.getLogger(__name__).warning("Voice systems not available (STT/TTS)")
 
 # 로깅 설정
 logging.basicConfig(
@@ -283,6 +294,121 @@ if HAS_NEW_SYSTEMS:
 else:
     counseling_system = None
     self_check_system = None
+
+
+# ============================================================================
+# 음성 시스템 초기화 및 함수
+# ============================================================================
+
+def init_voice_systems():
+    """음성 시스템 초기화 (지연 로딩)"""
+    global whisper_stt, zonos_tts
+
+    if not HAS_VOICE_SYSTEMS:
+        return False
+
+    try:
+        if whisper_stt is None:
+            whisper_stt = WhisperSTT(
+                model_size="medium",  # RTX 5060 Ti용
+                device="cuda",
+                language="ko"
+            )
+            logger.info("STT 시스템 초기화 완료")
+
+        if zonos_tts is None:
+            zonos_tts = ZonosTTS(device="cuda")
+            logger.info("TTS 시스템 초기화 완료")
+
+        return True
+    except Exception as e:
+        logger.error(f"음성 시스템 초기화 실패: {e}")
+        return False
+
+
+def transcribe_audio(audio_path: str) -> str:
+    """음성을 텍스트로 변환 (STT)"""
+    if not HAS_VOICE_SYSTEMS or audio_path is None:
+        return ""
+
+    try:
+        # 지연 초기화
+        if whisper_stt is None:
+            if not init_voice_systems():
+                return "[음성 인식 시스템을 사용할 수 없습니다]"
+
+        result = whisper_stt.transcribe_file(audio_path)
+        return result.text if result else ""
+    except Exception as e:
+        logger.error(f"음성 인식 오류: {e}")
+        return f"[음성 인식 오류: {str(e)}]"
+
+
+def synthesize_speech(text: str, emotion: str = "calm") -> Optional[str]:
+    """텍스트를 음성으로 변환 (TTS)"""
+    if not HAS_VOICE_SYSTEMS or not text:
+        return None
+
+    try:
+        # 지연 초기화
+        if zonos_tts is None:
+            if not init_voice_systems():
+                return None
+
+        # 상담사 목소리 설정 (차분한 톤)
+        config = SpeechConfig(
+            speaking_rate=0.9,
+            pitch=-2.0,
+            emotion=emotion,
+            emotion_intensity=0.6
+        )
+
+        result = zonos_tts.synthesize(text, config=config)
+
+        if result:
+            # 임시 파일로 저장
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                result.save(f.name)
+                return f.name
+        return None
+    except Exception as e:
+        logger.error(f"음성 합성 오류: {e}")
+        return None
+
+
+def voice_chat_response(
+    audio_path: str,
+    history: List[List[str]],
+    session_id: str,
+    enable_tts: bool = True
+) -> Tuple[str, List[List[str]], str, str, str, Dict, str, str, Optional[str]]:
+    """
+    음성 기반 채팅 응답
+
+    Returns:
+        Tuple: (...기존 반환값..., 음성 응답 파일 경로)
+    """
+    # 음성을 텍스트로 변환
+    message = transcribe_audio(audio_path)
+
+    if not message or message.startswith("["):
+        # 오류 메시지 또는 빈 텍스트
+        return ("", history, "음성을 인식하지 못했습니다.", "", session_id,
+                None, "", "", None)
+
+    # 기존 chat_response 호출
+    result = chat_response(message, history, session_id)
+
+    # TTS 활성화시 음성 응답 생성
+    audio_response = None
+    if enable_tts and len(result) > 1:
+        response_text = result[1][-1][1] if result[1] else ""
+        if response_text:
+            audio_response = synthesize_speech(response_text)
+
+    # 결과에 음성 응답 추가
+    return result + (audio_response,)
 
 
 # ============================================================================
@@ -758,7 +884,7 @@ def start_assessment(assessment_type: str, session_id: str) -> Tuple[str, str, s
     return question_text, "", session_id
 
 
-def clear_chat(session_id: str) -> Tuple[List, str, str, str, Dict, str, str]:
+def clear_chat(session_id: str) -> Tuple[List, str, str, str, Dict, str, str, None]:
     """
     채팅 초기화
 
@@ -766,7 +892,7 @@ def clear_chat(session_id: str) -> Tuple[List, str, str, str, Dict, str, str]:
         session_id: 세션 ID
 
     Returns:
-        Tuple: (빈 히스토리, 빈 감정 상태, 빈 경고, 새 세션 ID, 빈 그래프, 품질 초기화, 단계 초기화)
+        Tuple: (빈 히스토리, 빈 감정 상태, 빈 경고, 새 세션 ID, 빈 그래프, 품질 초기화, 단계 초기화, 음성 초기화)
     """
     new_session_id = create_new_session()
 
@@ -780,7 +906,7 @@ def clear_chat(session_id: str) -> Tuple[List, str, str, str, Dict, str, str]:
     initial_phase = format_session_phase(0)
     initial_quality = "대화를 시작하면 상담 품질이 표시됩니다."
 
-    return [[None, greeting]], "", "", new_session_id, {}, initial_quality, initial_phase
+    return [[None, greeting]], "", "", new_session_id, {}, initial_quality, initial_phase, None
 
 
 def show_emergency_resources() -> str:
@@ -901,6 +1027,34 @@ def build_interface():
                         send_btn = gr.Button("전송 📤", variant="primary")
                         clear_btn = gr.Button("초기화 🔄")
 
+                # 음성 입력 영역
+                with gr.Accordion("🎤 음성으로 대화하기", open=False):
+                    with gr.Row():
+                        audio_input = gr.Audio(
+                            sources=["microphone"],
+                            type="filepath",
+                            label="음성 녹음",
+                            scale=3
+                        )
+                        with gr.Column(scale=1):
+                            voice_send_btn = gr.Button("음성 전송 🎙️", variant="primary")
+                            enable_tts = gr.Checkbox(
+                                label="음성 응답",
+                                value=True,
+                                info="AI 응답을 음성으로 재생"
+                            )
+
+                    audio_output = gr.Audio(
+                        label="마음이 응답",
+                        type="filepath",
+                        autoplay=True,
+                        visible=True
+                    )
+
+                    voice_status = gr.Markdown(
+                        f"{'✅ 음성 기능 사용 가능' if HAS_VOICE_SYSTEMS else '⚠️ 음성 모듈이 설치되지 않았습니다'}"
+                    )
+
             # 오른쪽: 사이드바 (30%)
             with gr.Column(scale=3):
 
@@ -964,11 +1118,29 @@ def build_interface():
             outputs=[msg, chatbot, emotion_status, crisis_warning, session_id_state, emotion_graph, quality_status, phase_status]
         )
 
+        # 음성 전송
+        def handle_voice_input(audio, history, session_id, tts_enabled):
+            """음성 입력 처리"""
+            if audio is None:
+                gr.Warning("음성을 녹음해주세요.")
+                return None, history, "", "", session_id, None, "", "", None
+
+            result = voice_chat_response(audio, history, session_id, tts_enabled)
+            # 반환: (msg, chatbot, emotion, crisis, session, graph, quality, phase, audio_out)
+            return result
+
+        voice_send_btn.click(
+            handle_voice_input,
+            inputs=[audio_input, chatbot, session_id_state, enable_tts],
+            outputs=[msg, chatbot, emotion_status, crisis_warning, session_id_state,
+                    emotion_graph, quality_status, phase_status, audio_output]
+        )
+
         # 초기화
         clear_btn.click(
             clear_chat,
             inputs=[session_id_state],
-            outputs=[chatbot, emotion_status, crisis_warning, session_id_state, emotion_graph, quality_status, phase_status]
+            outputs=[chatbot, emotion_status, crisis_warning, session_id_state, emotion_graph, quality_status, phase_status, audio_output]
         )
 
         # 긴급 연락처 버튼

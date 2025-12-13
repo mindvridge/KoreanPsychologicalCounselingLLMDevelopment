@@ -86,13 +86,103 @@ logger = logging.getLogger(__name__)
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
 
+# OpenAPI Tags 메타데이터
+tags_metadata = [
+    {
+        "name": "Root",
+        "description": "API 루트 및 기본 정보 엔드포인트",
+    },
+    {
+        "name": "Health",
+        "description": "서버 상태 및 헬스체크 엔드포인트",
+    },
+    {
+        "name": "Chat",
+        "description": "AI 심리상담 대화 API. 감정 분석, 위기 감지, 공감적 응답 생성 포함",
+    },
+    {
+        "name": "Session",
+        "description": "상담 세션 관리. 세션 생성, 조회, 삭제 및 이력 관리",
+    },
+    {
+        "name": "Assessment",
+        "description": "심리검사 도구 API. PHQ-9(우울), GAD-7(불안), K-10(정신건강) 지원",
+    },
+    {
+        "name": "Feedback",
+        "description": "상담 피드백 수집 및 품질 개선 API",
+    },
+    {
+        "name": "Statistics",
+        "description": "시스템 통계 및 분석 데이터 API",
+    },
+    {
+        "name": "User Profile",
+        "description": "사용자 프로필 관리. 이력, 동의, 개인화 설정 포함",
+    },
+    {
+        "name": "Personas",
+        "description": "상담사 페르소나 관리. 다양한 상담 스타일 지원",
+    },
+    {
+        "name": "Persona Feedback",
+        "description": "페르소나 피드백 및 성능 분석 API",
+    },
+    {
+        "name": "Monitoring",
+        "description": "시스템 모니터링 및 Prometheus 메트릭",
+    },
+    {
+        "name": "System",
+        "description": "시스템 정보 및 설정 API",
+    },
+]
+
 # Create FastAPI app
 app = FastAPI(
-    title="Korean Mental Health Counseling API",
-    description="AI-powered mental health counseling system with crisis detection and psychological assessments",
-    version="1.0.0",
+    title="한국형 심리상담 AI API (Korean Mental Health Counseling API)",
+    description="""
+## 🧠 AI 기반 한국어 심리상담 시스템
+
+SOLAR-Ko-10.7B 모델을 기반으로 한 전문적인 심리상담 AI 시스템입니다.
+
+### 주요 기능
+
+* **🗣️ 공감적 대화**: 한국 문화를 이해하는 따뜻한 상담 응답
+* **😊 감정 분석**: 실시간 감정 인식 및 강도 측정
+* **🚨 위기 감지**: 4층 구조의 정교한 위기 상황 감지 시스템
+* **📋 심리검사**: PHQ-9, GAD-7, K-10 등 표준화된 검사 도구
+* **👤 개인화**: 사용자별 맞춤 상담 경험 제공
+
+### 안전 시스템
+
+| 레벨 | 설명 | 대응 |
+|------|------|------|
+| LOW | 안전 | 일반 상담 진행 |
+| MEDIUM | 주의 | 관심 강화 |
+| HIGH | 위험 | 즉시 개입 |
+| CRITICAL | 위기 | 전문기관 연계 |
+
+### 긴급 연락처
+
+* 자살예방상담전화: **1393** (24시간)
+* 정신건강위기상담전화: **1577-0199** (24시간)
+
+---
+⚠️ **면책조항**: 이 API는 보조 도구이며 전문 의료 서비스를 대체하지 않습니다.
+""",
+    version="2.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    openapi_tags=tags_metadata,
+    contact={
+        "name": "Korean Mental Health AI Team",
+        "url": "https://github.com/mindvridge/KoreanPsychologicalCounselingLLMDevelopment",
+    },
+    license_info={
+        "name": "MIT License",
+        "url": "https://opensource.org/licenses/MIT",
+    },
 )
 
 # Add rate limit exception handler
@@ -127,16 +217,21 @@ crisis_detections = Counter('crisis_detections_total', 'Total crisis detections'
 # ============================================================================
 
 class ChatRequest(BaseModel):
-    """Chat message request"""
-    session_id: Optional[str] = Field(None, description="Session ID (will be generated if not provided)")
-    user_id: Optional[str] = Field(None, description="User identifier for personalization (optional)")
-    persona_id: Optional[str] = Field(None, description="Counselor persona ID (e.g., 'warm_mother')")
-    message: str = Field(..., min_length=1, max_length=2000, description="User message")
+    """
+    AI 심리상담 대화 요청
+
+    사용자 메시지를 전송하고 AI 상담사의 공감적 응답을 받습니다.
+    감정 분석, 위기 감지가 자동으로 수행됩니다.
+    """
+    session_id: Optional[str] = Field(None, description="세션 ID (미제공시 자동 생성)")
+    user_id: Optional[str] = Field(None, description="사용자 ID (개인화용, 선택)")
+    persona_id: Optional[str] = Field(None, description="상담사 페르소나 ID (예: 'warm_mother', 'professional')")
+    message: str = Field(..., min_length=1, max_length=2000, description="사용자 메시지")
     conversation_history: Optional[List[Dict[str, str]]] = Field(
         None,
-        description="Conversation history in format [{'role': 'user/assistant', 'content': '...'}]"
+        description="대화 이력 [{'role': 'user/assistant', 'content': '...'}]"
     )
-    consent: bool = Field(default=True, description="Data storage consent for personalization")
+    consent: bool = Field(default=True, description="데이터 저장 동의 (개인화용)")
 
     @validator('message')
     def message_not_empty(cls, v):
@@ -144,17 +239,51 @@ class ChatRequest(BaseModel):
             raise ValueError('Message cannot be empty')
         return v.strip()
 
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "message": "요즘 너무 불안하고 걱정이 많아요. 잠도 잘 못 자고...",
+                "session_id": "550e8400-e29b-41d4-a716-446655440000",
+                "persona_id": "warm_mother"
+            }
+        }
+
 
 class ChatResponse(BaseModel):
-    """Chat message response"""
-    session_id: str = Field(..., description="Session ID")
-    response: str = Field(..., description="AI assistant response")
-    crisis_detected: bool = Field(..., description="Whether crisis was detected")
-    crisis_level: int = Field(..., description="Crisis level (0=none, 1-5=severity)")
-    emotions: Optional[Dict[str, Any]] = Field(None, description="Detected emotions")
-    suggested_assessment: Optional[str] = Field(None, description="Suggested psychological assessment")
-    response_time: float = Field(..., description="Response time in seconds")
-    metadata: Dict[str, Any] = Field(..., description="Additional metadata")
+    """
+    AI 심리상담 응답
+
+    공감적 응답과 함께 감정 분석, 위기 감지 결과를 반환합니다.
+    """
+    session_id: str = Field(..., description="세션 ID")
+    response: str = Field(..., description="AI 상담사 응답 메시지")
+    crisis_detected: bool = Field(..., description="위기 상황 감지 여부")
+    crisis_level: int = Field(..., description="위기 수준 (0=없음, 1-5=심각도)")
+    emotions: Optional[Dict[str, Any]] = Field(None, description="감지된 감정 정보")
+    suggested_assessment: Optional[str] = Field(None, description="권장 심리검사 유형")
+    response_time: float = Field(..., description="응답 생성 시간 (초)")
+    metadata: Dict[str, Any] = Field(..., description="추가 메타데이터")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "550e8400-e29b-41d4-a716-446655440000",
+                "response": "불안하고 잠을 못 주무시는군요. 그런 상황이 얼마나 힘드실지 충분히 이해합니다. 혹시 언제부터 이런 증상이 시작되었는지 여쭤봐도 될까요?",
+                "crisis_detected": False,
+                "crisis_level": 0,
+                "emotions": {
+                    "primary_emotion": "불안",
+                    "intensity": 7,
+                    "emotions": {"불안": 0.7, "걱정": 0.5, "피로": 0.3}
+                },
+                "suggested_assessment": "gad7",
+                "response_time": 0.45,
+                "metadata": {
+                    "session_phase": "문제 탐색",
+                    "counseling_quality": 0.85
+                }
+            }
+        }
 
 
 class SessionResponse(BaseModel):
