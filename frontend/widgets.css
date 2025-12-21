@@ -1,0 +1,1119 @@
+/* ============================================================================
+   마음챗 위젯 스타일
+   주간 기분 그래프 | 호흡 운동 | 숙제 트래커
+   ============================================================================ */
+
+/* ============================================================================
+   공통 스타일
+   ============================================================================ */
+
+.widget-container {
+    display: grid;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+@media (min-width: 768px) {
+    .widget-container {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (min-width: 1024px) {
+    .widget-container {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* 토스트 메시지 */
+.mood-toast,
+.homework-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--text);
+    color: white;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-full);
+    font-size: 0.9rem;
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.mood-toast.show,
+.homework-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+/* ============================================================================
+   1. 주간 기분 트래커 (Mood Tracker)
+   ============================================================================ */
+
+.mood-tracker-widget {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+    box-shadow: 0 2px 8px var(--shadow);
+}
+
+.mood-tracker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-md);
+}
+
+.mood-tracker-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.mood-tracker-title h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.mood-tracker-icon {
+    font-size: 1.5rem;
+}
+
+.mood-tracker-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.mood-nav-btn {
+    background: var(--bg);
+    border: none;
+    padding: 6px 10px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    color: var(--text-light);
+    transition: all 0.2s;
+}
+
+.mood-nav-btn:hover:not(:disabled) {
+    background: var(--primary-light);
+    color: white;
+}
+
+.mood-nav-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.mood-week-label {
+    font-size: 0.85rem;
+    color: var(--text-light);
+    min-width: 60px;
+    text-align: center;
+}
+
+/* 차트 컨테이너 */
+.mood-chart-container {
+    position: relative;
+    padding-left: 30px;
+    margin-bottom: var(--space-md);
+}
+
+.mood-chart {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    height: 180px;
+    padding: 10px 0;
+    background: linear-gradient(to top,
+        var(--bg) 0%,
+        var(--bg) 33%,
+        rgba(91, 138, 114, 0.05) 33%,
+        rgba(91, 138, 114, 0.05) 66%,
+        rgba(91, 138, 114, 0.1) 66%
+    );
+    border-radius: var(--radius);
+}
+
+.mood-y-axis {
+    position: absolute;
+    left: 0;
+    top: 10px;
+    bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: var(--text-light);
+}
+
+.mood-bar-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    gap: 4px;
+}
+
+.mood-bar-wrapper.today {
+    background: rgba(91, 138, 114, 0.1);
+    border-radius: var(--radius);
+    margin: -5px 0;
+    padding: 5px 0;
+}
+
+.mood-emoji {
+    font-size: 1.2rem;
+    min-height: 28px;
+}
+
+.mood-bar-container {
+    width: 24px;
+    height: 100px;
+    background: var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+}
+
+.mood-bar {
+    width: 100%;
+    background: linear-gradient(to top, var(--primary), var(--primary-light));
+    border-radius: var(--radius);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    transition: height 0.5s ease;
+    height: 0;
+}
+
+.mood-bar.animated {
+    height: var(--target-height, 50%);
+}
+
+.mood-bar[data-mood="1"],
+.mood-bar[data-mood="2"] { background: linear-gradient(to top, #D97B7B, #E8A5A5); }
+.mood-bar[data-mood="3"],
+.mood-bar[data-mood="4"] { background: linear-gradient(to top, #E8B298, #F0C9B0); }
+.mood-bar[data-mood="5"],
+.mood-bar[data-mood="6"] { background: linear-gradient(to top, #C9B896, #D8CDB0); }
+.mood-bar[data-mood="7"],
+.mood-bar[data-mood="8"] { background: linear-gradient(to top, #7BA893, #9DC4B0); }
+.mood-bar[data-mood="9"],
+.mood-bar[data-mood="10"] { background: linear-gradient(to top, #5B8A72, #7BA893); }
+
+.mood-value {
+    font-size: 0.7rem;
+    color: white;
+    font-weight: 600;
+    padding-top: 4px;
+}
+
+.mood-day {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.mood-date {
+    font-size: 0.7rem;
+    color: var(--text-light);
+}
+
+/* 통계 */
+.mood-stats {
+    display: flex;
+    justify-content: space-around;
+    padding: var(--space-sm);
+    background: var(--bg);
+    border-radius: var(--radius);
+    margin-bottom: var(--space-sm);
+}
+
+.mood-stat-item {
+    text-align: center;
+}
+
+.mood-stat-item .stat-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-light);
+    margin-bottom: 2px;
+}
+
+.mood-stat-item .stat-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.mood-stat-item.trend-up .stat-value { color: var(--primary); }
+.mood-stat-item.trend-down .stat-value { color: var(--danger); }
+
+/* 인사이트 */
+.mood-insight {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    background: linear-gradient(135deg, rgba(91, 138, 114, 0.1), rgba(232, 178, 152, 0.1));
+    border-radius: var(--radius);
+    margin-bottom: var(--space-md);
+}
+
+.mood-insight .insight-icon {
+    font-size: 1.2rem;
+}
+
+.mood-insight p {
+    font-size: 0.9rem;
+    color: var(--text);
+    line-height: 1.5;
+}
+
+/* 빠른 기록 */
+.mood-quick-log {
+    text-align: center;
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--border);
+}
+
+.mood-quick-log > span {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-light);
+    margin-bottom: var(--space-xs);
+}
+
+.mood-quick-buttons {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-xs);
+}
+
+.mood-quick-btn {
+    font-size: 1.5rem;
+    padding: 8px 12px;
+    background: var(--bg);
+    border: 2px solid transparent;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.mood-quick-btn:hover {
+    transform: scale(1.2);
+    border-color: var(--primary);
+}
+
+/* ============================================================================
+   2. 호흡 운동 (Breathing Exercise)
+   ============================================================================ */
+
+.breathing-widget {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+    box-shadow: 0 2px 8px var(--shadow);
+}
+
+.breathing-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-md);
+}
+
+.breathing-header h3 {
+    flex: 1;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.breathing-icon {
+    font-size: 1.5rem;
+}
+
+.breathing-settings-btn {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--radius);
+    transition: background 0.2s;
+}
+
+.breathing-settings-btn:hover {
+    background: var(--bg);
+}
+
+/* 설정 패널 */
+.breathing-settings {
+    display: none;
+    padding: var(--space-md);
+    background: var(--bg);
+    border-radius: var(--radius);
+    margin-bottom: var(--space-md);
+}
+
+.breathing-settings.open {
+    display: block;
+}
+
+.settings-section {
+    margin-bottom: var(--space-md);
+}
+
+.settings-section:last-child {
+    margin-bottom: 0;
+}
+
+.settings-section label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-light);
+    margin-bottom: var(--space-xs);
+}
+
+.pattern-options {
+    display: grid;
+    gap: var(--space-xs);
+}
+
+.pattern-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: var(--space-sm);
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pattern-btn:hover {
+    border-color: var(--primary-light);
+}
+
+.pattern-btn.active {
+    border-color: var(--primary);
+    background: rgba(91, 138, 114, 0.05);
+}
+
+.pattern-btn strong {
+    display: block;
+    color: var(--text);
+}
+
+.pattern-btn small {
+    color: var(--text-light);
+    font-size: 0.8rem;
+}
+
+.round-selector,
+.sound-options {
+    display: flex;
+    gap: var(--space-xs);
+}
+
+.round-btn,
+.sound-btn {
+    flex: 1;
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.round-btn:hover,
+.sound-btn:hover {
+    border-color: var(--primary-light);
+}
+
+.round-btn.active,
+.sound-btn.active {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: white;
+}
+
+/* 메인 애니메이션 영역 */
+.breathing-main {
+    text-align: center;
+    padding: var(--space-md) 0;
+}
+
+.breathing-circle-container {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    margin: 0 auto var(--space-md);
+}
+
+.breathing-circle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 120px;
+    height: 120px;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.5s ease;
+    box-shadow: 0 4px 20px rgba(91, 138, 114, 0.3);
+}
+
+.breathing-circle.inhale {
+    width: 180px;
+    height: 180px;
+    background: linear-gradient(135deg, var(--primary), #9DC4B0);
+}
+
+.breathing-circle.hold {
+    width: 180px;
+    height: 180px;
+    background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+}
+
+.breathing-circle.exhale {
+    width: 120px;
+    height: 120px;
+    background: linear-gradient(135deg, var(--primary-light), var(--accent));
+}
+
+.breathing-circle.complete {
+    background: linear-gradient(135deg, #7BA893, #9DC4B0);
+    animation: pulse 1s ease infinite;
+}
+
+.breathing-circle.paused {
+    opacity: 0.6;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.05); }
+}
+
+.breathing-inner-circle {
+    text-align: center;
+    color: white;
+}
+
+.breathing-text {
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.breathing-timer {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-top: 4px;
+}
+
+/* 진행 링 */
+.breathing-progress-ring {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 200px;
+    height: 200px;
+    transform: rotate(-90deg);
+}
+
+.progress-ring-bg {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 4;
+}
+
+.progress-ring-fill {
+    fill: none;
+    stroke: var(--primary);
+    stroke-width: 4;
+    stroke-linecap: round;
+}
+
+/* 단계 표시 */
+.breathing-phase-indicator {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-md);
+}
+
+.phase-step {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: var(--bg);
+    border-radius: var(--radius-full);
+    font-size: 0.85rem;
+    color: var(--text-light);
+    transition: all 0.3s;
+}
+
+.phase-step.active {
+    background: var(--primary);
+    color: white;
+}
+
+.phase-dot {
+    width: 6px;
+    height: 6px;
+    background: currentColor;
+    border-radius: 50%;
+}
+
+.phase-arrow {
+    color: var(--text-light);
+    font-size: 0.8rem;
+}
+
+.breathing-round-info {
+    font-size: 0.9rem;
+    color: var(--text-light);
+}
+
+/* 컨트롤 버튼 */
+.breathing-controls {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.breathing-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    border: none;
+    border-radius: var(--radius-full);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.breathing-btn-start {
+    background: var(--primary);
+    color: white;
+}
+
+.breathing-btn-start:hover {
+    background: var(--primary-dark);
+}
+
+.breathing-btn-pause {
+    background: var(--accent);
+    color: var(--text);
+}
+
+.breathing-btn-stop {
+    background: var(--border);
+    color: var(--text);
+}
+
+.breathing-btn-restart {
+    background: var(--primary);
+    color: white;
+    margin-top: var(--space-md);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* 완료 화면 */
+.breathing-complete {
+    text-align: center;
+    padding: var(--space-lg);
+}
+
+.breathing-complete .complete-emoji {
+    font-size: 3rem;
+    margin-bottom: var(--space-sm);
+}
+
+.breathing-complete h4 {
+    font-size: 1.3rem;
+    color: var(--primary);
+    margin-bottom: var(--space-xs);
+}
+
+.breathing-complete p {
+    color: var(--text);
+}
+
+.breathing-complete .complete-tip {
+    font-size: 0.9rem;
+    color: var(--text-light);
+    font-style: italic;
+    margin-top: var(--space-sm);
+}
+
+/* ============================================================================
+   3. 숙제 트래커 (Homework Tracker)
+   ============================================================================ */
+
+.homework-widget {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+    box-shadow: 0 2px 8px var(--shadow);
+}
+
+.homework-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-md);
+}
+
+.homework-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.homework-title h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.homework-icon {
+    font-size: 1.5rem;
+}
+
+.homework-completion {
+    text-align: right;
+}
+
+.homework-completion .completion-rate {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.homework-completion .completion-label {
+    font-size: 0.75rem;
+    color: var(--text-light);
+}
+
+/* 연속 달성 배지 */
+.streak-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    background: linear-gradient(135deg, rgba(91, 138, 114, 0.1), rgba(91, 138, 114, 0.2));
+    border-radius: var(--radius);
+    margin-bottom: var(--space-md);
+}
+
+.streak-badge.fire {
+    background: linear-gradient(135deg, rgba(232, 178, 152, 0.2), rgba(217, 123, 123, 0.2));
+}
+
+.streak-icon {
+    font-size: 1.3rem;
+}
+
+.streak-count {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.streak-badge.fire .streak-count {
+    color: var(--danger);
+}
+
+.streak-label {
+    font-size: 0.9rem;
+    color: var(--text);
+}
+
+.streak-record {
+    background: var(--primary);
+    color: white;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    margin-left: var(--space-xs);
+}
+
+/* 진행률 바 */
+.homework-progress-bar {
+    height: 8px;
+    background: var(--border);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    margin-bottom: var(--space-md);
+}
+
+.homework-progress-bar .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--primary-light));
+    border-radius: var(--radius-full);
+    transition: width 0.5s ease;
+}
+
+/* 숙제 목록 */
+.homework-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+}
+
+.homework-item {
+    padding: var(--space-sm);
+    background: var(--bg);
+    border-radius: var(--radius);
+    border-left: 4px solid var(--primary);
+    transition: all 0.2s;
+}
+
+.homework-item.highlight {
+    animation: highlightPulse 1s ease 2;
+}
+
+@keyframes highlightPulse {
+    0%, 100% { background: var(--bg); }
+    50% { background: rgba(91, 138, 114, 0.15); }
+}
+
+.homework-item-header {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+}
+
+.homework-item-icon {
+    font-size: 1.3rem;
+}
+
+.homework-item-info {
+    flex: 1;
+}
+
+.homework-item-info h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 2px;
+}
+
+.homework-item-info p {
+    font-size: 0.8rem;
+    color: var(--text-light);
+}
+
+.homework-item-progress {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--primary);
+}
+
+/* 일일 트래커 */
+.daily-tracker {
+    display: flex;
+    gap: 4px;
+    margin-top: var(--space-sm);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--border);
+}
+
+.day-cell {
+    flex: 1;
+    text-align: center;
+    padding: 6px 4px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.day-cell.today {
+    background: rgba(91, 138, 114, 0.1);
+    border: 2px solid var(--primary);
+}
+
+.day-cell.completed {
+    background: var(--primary);
+    color: white;
+}
+
+.day-cell.missed {
+    background: rgba(217, 123, 123, 0.1);
+    color: var(--danger);
+}
+
+.day-cell.pending:hover {
+    background: rgba(91, 138, 114, 0.2);
+}
+
+.day-cell.future {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.day-label {
+    display: block;
+    font-size: 0.7rem;
+    margin-bottom: 2px;
+}
+
+.day-status {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+/* 진행형 과제 */
+.ongoing-progress {
+    margin-top: var(--space-sm);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.ongoing-progress-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.ongoing-progress-fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: var(--radius-full);
+    transition: width 0.3s ease;
+}
+
+.add-progress-btn {
+    padding: 6px 12px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.add-progress-btn:hover {
+    background: var(--primary-dark);
+}
+
+/* 일회성 과제 */
+.homework-item.one-time {
+    border-left-color: var(--accent);
+}
+
+.homework-item.one-time.completed {
+    border-left-color: var(--primary);
+    opacity: 0.7;
+}
+
+.homework-item.one-time.overdue {
+    border-left-color: var(--danger);
+}
+
+.complete-checkbox {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--primary);
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    color: white;
+    transition: all 0.2s;
+}
+
+.complete-checkbox.checked {
+    background: var(--primary);
+}
+
+.homework-due {
+    font-size: 0.75rem;
+    color: var(--text-light);
+    padding: 4px 8px;
+    background: var(--border);
+    border-radius: var(--radius-full);
+}
+
+.homework-due.overdue {
+    background: rgba(217, 123, 123, 0.2);
+    color: var(--danger);
+}
+
+.start-homework-btn {
+    width: 100%;
+    margin-top: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--accent);
+    color: var(--text);
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.start-homework-btn:hover {
+    background: var(--primary);
+    color: white;
+}
+
+/* 오늘 요약 */
+.today-summary {
+    padding: var(--space-sm);
+    background: linear-gradient(135deg, rgba(91, 138, 114, 0.05), rgba(232, 178, 152, 0.05));
+    border-radius: var(--radius);
+    margin-bottom: var(--space-md);
+}
+
+.today-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-weight: 600;
+    margin-bottom: var(--space-xs);
+}
+
+.today-icon {
+    font-size: 1rem;
+}
+
+.today-complete {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    color: var(--primary);
+    font-weight: 500;
+}
+
+.today-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.today-task {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 6px var(--space-sm);
+    background: var(--surface);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+}
+
+.today-task:hover {
+    background: var(--primary-light);
+    color: white;
+}
+
+.today-task.urgent {
+    border-left: 3px solid var(--danger);
+}
+
+.urgent-badge {
+    background: var(--danger);
+    color: white;
+    padding: 2px 6px;
+    border-radius: var(--radius-full);
+    font-size: 0.7rem;
+    margin-left: auto;
+}
+
+/* 격려 메시지 */
+.homework-encouragement {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    background: var(--bg);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    color: var(--text);
+}
+
+.encouragement-icon {
+    font-size: 1.2rem;
+}
+
+/* ============================================================================
+   반응형
+   ============================================================================ */
+
+@media (max-width: 480px) {
+    .mood-chart {
+        height: 150px;
+    }
+
+    .mood-bar-container {
+        height: 80px;
+    }
+
+    .breathing-circle-container {
+        width: 160px;
+        height: 160px;
+    }
+
+    .breathing-circle {
+        width: 100px;
+        height: 100px;
+    }
+
+    .breathing-circle.inhale {
+        width: 140px;
+        height: 140px;
+    }
+
+    .breathing-progress-ring {
+        width: 160px;
+        height: 160px;
+    }
+
+    .daily-tracker {
+        flex-wrap: wrap;
+    }
+
+    .day-cell {
+        width: calc(14.28% - 4px);
+    }
+}

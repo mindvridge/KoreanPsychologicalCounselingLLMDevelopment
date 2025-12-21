@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>마음챗 - 나의 상담 대시보드</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="widgets.css">
+    <style>
+        /* 대시보드 전용 스타일 */
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: var(--space-md);
+        }
+
+        .dashboard-header {
+            text-align: center;
+            margin-bottom: var(--space-xl);
+            padding: var(--space-lg);
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            border-radius: var(--radius-lg);
+            color: white;
+        }
+
+        .dashboard-header h1 {
+            font-size: 1.8rem;
+            margin-bottom: var(--space-xs);
+        }
+
+        .dashboard-header p {
+            opacity: 0.9;
+            font-size: 1rem;
+        }
+
+        .dashboard-greeting {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-sm);
+            margin-bottom: var(--space-sm);
+        }
+
+        .user-avatar-large {
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+        }
+
+        .dashboard-stats {
+            display: flex;
+            justify-content: center;
+            gap: var(--space-lg);
+            margin-top: var(--space-md);
+        }
+
+        .dashboard-stat {
+            text-align: center;
+        }
+
+        .dashboard-stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .dashboard-stat-label {
+            font-size: 0.85rem;
+            opacity: 0.8;
+        }
+
+        /* 위젯 그리드 */
+        .widgets-grid {
+            display: grid;
+            gap: var(--space-lg);
+            grid-template-columns: 1fr;
+        }
+
+        @media (min-width: 768px) {
+            .widgets-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .widget-full {
+                grid-column: span 2;
+            }
+        }
+
+        @media (min-width: 1200px) {
+            .widgets-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .widget-full {
+                grid-column: span 3;
+            }
+
+            .widget-wide {
+                grid-column: span 2;
+            }
+        }
+
+        /* 빠른 액션 버튼 */
+        .quick-actions {
+            display: flex;
+            justify-content: center;
+            gap: var(--space-sm);
+            margin-top: var(--space-lg);
+            flex-wrap: wrap;
+        }
+
+        .quick-action-btn {
+            display: flex;
+            align-items: center;
+            gap: var(--space-xs);
+            padding: var(--space-sm) var(--space-md);
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: var(--radius-full);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.95rem;
+            color: var(--text);
+            text-decoration: none;
+        }
+
+        .quick-action-btn:hover {
+            border-color: var(--primary);
+            background: rgba(91, 138, 114, 0.05);
+        }
+
+        .quick-action-btn.primary {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+
+        .quick-action-btn.primary:hover {
+            background: var(--primary-dark);
+        }
+
+        /* 다음 상담 카드 */
+        .next-session-card {
+            background: linear-gradient(135deg, rgba(232, 178, 152, 0.2), rgba(232, 178, 152, 0.1));
+            border-radius: var(--radius-lg);
+            padding: var(--space-md);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-lg);
+        }
+
+        .next-session-info {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+        }
+
+        .next-session-icon {
+            font-size: 2.5rem;
+        }
+
+        .next-session-details h3 {
+            font-size: 1rem;
+            color: var(--text-light);
+            margin-bottom: 4px;
+        }
+
+        .next-session-details p {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .next-session-details small {
+            color: var(--text-light);
+        }
+
+        .join-session-btn {
+            padding: var(--space-sm) var(--space-lg);
+            background: var(--accent);
+            color: var(--text);
+            border: none;
+            border-radius: var(--radius-full);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .join-session-btn:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        /* 위기 지원 플로팅 버튼 */
+        .crisis-fab {
+            position: fixed;
+            bottom: var(--space-lg);
+            right: var(--space-lg);
+            width: 60px;
+            height: 60px;
+            background: var(--danger);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(217, 123, 123, 0.4);
+            transition: all 0.2s;
+            z-index: 100;
+        }
+
+        .crisis-fab:hover {
+            transform: scale(1.1);
+        }
+
+        /* 푸터 */
+        .dashboard-footer {
+            text-align: center;
+            padding: var(--space-lg);
+            color: var(--text-light);
+            font-size: 0.85rem;
+        }
+
+        .dashboard-footer a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- 헤더 -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">💚 마음챗</div>
+            <nav class="header-nav">
+                <a href="index.html" class="nav-link">상담하기</a>
+                <a href="dashboard.html" class="nav-link active">대시보드</a>
+            </nav>
+            <div class="user-info">
+                <button class="btn-icon" title="알림">🔔</button>
+                <button class="btn-icon user-avatar" title="프로필">👤</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 컨텐츠 -->
+    <main class="dashboard-container">
+        <!-- 대시보드 헤더 -->
+        <div class="dashboard-header">
+            <div class="dashboard-greeting">
+                <div class="user-avatar-large">😊</div>
+                <div>
+                    <h1>안녕하세요, 민수님!</h1>
+                    <p>오늘도 함께 마음을 돌봐요</p>
+                </div>
+            </div>
+            <div class="dashboard-stats">
+                <div class="dashboard-stat">
+                    <div class="dashboard-stat-value">8</div>
+                    <div class="dashboard-stat-label">상담 회기</div>
+                </div>
+                <div class="dashboard-stat">
+                    <div class="dashboard-stat-value">12일</div>
+                    <div class="dashboard-stat-label">연속 기록</div>
+                </div>
+                <div class="dashboard-stat">
+                    <div class="dashboard-stat-value">56%</div>
+                    <div class="dashboard-stat-label">증상 개선</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 다음 상담 -->
+        <div class="next-session-card">
+            <div class="next-session-info">
+                <span class="next-session-icon">📅</span>
+                <div class="next-session-details">
+                    <h3>다음 상담</h3>
+                    <p>2024년 1월 22일 (월) 오후 3:00</p>
+                    <small>3일 후</small>
+                </div>
+            </div>
+            <button class="join-session-btn" onclick="location.href='index.html'">
+                상담 시작하기
+            </button>
+        </div>
+
+        <!-- 빠른 액션 -->
+        <div class="quick-actions">
+            <a href="index.html" class="quick-action-btn primary">
+                💬 상담하기
+            </a>
+            <button class="quick-action-btn" onclick="openBreathing()">
+                😮‍💨 호흡하기
+            </button>
+            <button class="quick-action-btn" onclick="openJournal()">
+                📝 기록하기
+            </button>
+            <button class="quick-action-btn" onclick="openProgress()">
+                📊 진전 보기
+            </button>
+        </div>
+
+        <!-- 위젯 그리드 -->
+        <div class="widgets-grid" style="margin-top: var(--space-xl);">
+            <!-- 기분 트래커 (넓은 위젯) -->
+            <div class="widget-wide" id="mood-tracker-container"></div>
+
+            <!-- 숙제 트래커 -->
+            <div id="homework-tracker-container"></div>
+
+            <!-- 호흡 운동 -->
+            <div id="breathing-container"></div>
+        </div>
+
+        <!-- 푸터 -->
+        <footer class="dashboard-footer">
+            <p>💚 마음챗 - AI 심리상담 서비스</p>
+            <p>
+                <a href="#">이용약관</a> ·
+                <a href="#">개인정보처리방침</a> ·
+                <a href="#">고객센터</a>
+            </p>
+            <p style="margin-top: var(--space-sm);">
+                긴급 도움이 필요하시면 자살예방상담전화 <strong>1393</strong> 또는
+                정신건강위기상담전화 <strong>1577-0199</strong>로 연락하세요.
+            </p>
+        </footer>
+    </main>
+
+    <!-- 위기 지원 FAB -->
+    <button class="crisis-fab" onclick="openCrisisSupport()" title="위기 지원">
+        🆘
+    </button>
+
+    <!-- 호흡 운동 모달 -->
+    <div id="breathing-modal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeBreathingModal()"></div>
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeBreathingModal()">✕</button>
+            <div id="breathing-modal-content"></div>
+        </div>
+    </div>
+
+    <!-- 스크립트 -->
+    <script src="config.js"></script>
+    <script src="mood-tracker.js"></script>
+    <script src="breathing-exercise.js"></script>
+    <script src="homework-tracker.js"></script>
+    <script>
+        // 대시보드 초기화
+        document.addEventListener('DOMContentLoaded', () => {
+            // 위젯 초기화
+            window.moodTracker = new MoodTracker('mood-tracker-container');
+            window.homeworkTracker = new HomeworkTracker('homework-tracker-container');
+            window.breathingExercise = new BreathingExercise('breathing-container');
+        });
+
+        // 빠른 액션 함수들
+        function openBreathing() {
+            const container = document.getElementById('breathing-container');
+            container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            // 하이라이트 효과
+            container.style.boxShadow = '0 0 20px rgba(91, 138, 114, 0.5)';
+            setTimeout(() => {
+                container.style.boxShadow = '';
+            }, 2000);
+        }
+
+        function openJournal() {
+            // 생각 기록 페이지로 이동 또는 모달 열기
+            alert('생각 기록 기능이 곧 추가됩니다!');
+        }
+
+        function openProgress() {
+            // 진전 상세 페이지로 이동
+            alert('상세 진전 보고서 페이지가 곧 추가됩니다!');
+        }
+
+        function openCrisisSupport() {
+            const confirmed = confirm(
+                '🆘 위기 지원\n\n' +
+                '지금 많이 힘드신가요?\n\n' +
+                '• 자살예방상담전화: 1393 (24시간)\n' +
+                '• 정신건강위기상담전화: 1577-0199\n\n' +
+                '전화 연결하시겠습니까?'
+            );
+
+            if (confirmed) {
+                window.location.href = 'tel:1393';
+            }
+        }
+
+        // 모달 함수들
+        function closeBreathingModal() {
+            document.getElementById('breathing-modal').classList.add('hidden');
+        }
+    </script>
+
+    <style>
+        /* 모달 스타일 */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.hidden {
+            display: none;
+        }
+
+        .modal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            position: relative;
+            background: var(--surface);
+            border-radius: var(--radius-lg);
+            padding: var(--space-lg);
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: var(--space-sm);
+            right: var(--space-sm);
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-light);
+        }
+
+        .nav-link {
+            color: var(--text-light);
+            text-decoration: none;
+            padding: var(--space-xs) var(--space-sm);
+            border-radius: var(--radius);
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover,
+        .nav-link.active {
+            color: var(--primary);
+            background: rgba(91, 138, 114, 0.1);
+        }
+
+        .header-nav {
+            display: flex;
+            gap: var(--space-xs);
+        }
+    </style>
+</body>
+</html>
