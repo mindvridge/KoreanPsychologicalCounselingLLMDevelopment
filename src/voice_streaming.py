@@ -13,7 +13,7 @@ import logging
 import asyncio
 import json
 import base64
-from typing import Optional, Dict, Any, Callable, Awaitable
+from typing import Optional, Dict, Any, Callable, Awaitable, Union
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -112,21 +112,28 @@ class VoiceStreamingPipeline:
 
         # 모듈 로드
         if self.stt is None:
-            from stt import WhisperSTT
+            from .stt import WhisperSTT
             self.stt = WhisperSTT()
             await asyncio.to_thread(self.stt.load_model)
 
         if self.tts is None:
-            from tts import ZonosTTS
+            from .tts import ZonosTTS
             self.tts = ZonosTTS()
             await asyncio.to_thread(self.tts.load_model)
 
         # LLM은 선택적
         if self.llm is None:
             try:
-                from main import CounselingChatbot
-                self.llm = CounselingChatbot()
-                await asyncio.to_thread(self.llm.load_model)
+                import sys
+                import os
+                # 프로젝트 루트를 경로에 추가
+                project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                if project_root not in sys.path:
+                    sys.path.insert(0, project_root)
+                from main_integrated import IntegratedMentalHealthSystem
+                # IntegratedMentalHealthSystem 사용
+                self.llm = IntegratedMentalHealthSystem()
+                # 비동기 초기화는 나중에 필요할 때
             except Exception as e:
                 logger.warning(f"LLM not loaded: {e}")
 
@@ -209,7 +216,7 @@ class VoiceStreamingPipeline:
             session.state = SessionState.SPEAKING
 
             # 컨텍스트 기반 음성 설정
-            from tts import CounselorVoice, SpeechConfig
+            from .tts import CounselorVoice, SpeechConfig
             speech_config = CounselorVoice.get_config_for_context({
                 "emotion": "neutral",
                 "response_type": "default"
@@ -297,8 +304,26 @@ class WebSocketVoiceHandler:
         ))
 
         try:
-            async for message in websocket:
-                await self._handle_message(websocket, session, message)
+            while True:
+                # FastAPI WebSocket 메시지 수신
+                try:
+                    message = await websocket.receive()
+                except Exception as e:
+                    logger.info(f"WebSocket receive error: {e}")
+                    break
+                
+                # message가 딕셔너리인지 확인
+                if not isinstance(message, dict):
+                    logger.warning(f"Received non-dict message: {type(message)}")
+                    continue
+                
+                # 메시지 타입에 따라 처리
+                if "text" in message:
+                    await self._handle_message(websocket, session, message["text"])
+                elif "bytes" in message:
+                    await self._handle_message(websocket, session, message["bytes"])
+                else:
+                    logger.warning(f"Unknown message format: {list(message.keys()) if isinstance(message, dict) else type(message)}")
 
         except Exception as e:
             logger.error(f"WebSocket error: {e}")
@@ -316,12 +341,24 @@ class WebSocketVoiceHandler:
         try:
             # JSON 메시지 파싱
             if isinstance(message, str):
-                data = json.loads(message)
+                try:
+                    data = json.loads(message)
+                except json.JSONDecodeError:
+                    # 문자열이 JSON이 아닌 경우, 텍스트 메시지로 처리
+                    data = {"type": "text", "text": message}
             elif isinstance(message, bytes):
                 # 바이너리 오디오 데이터
                 data = {"type": "audio", "data": base64.b64encode(message).decode()}
-            else:
+            elif isinstance(message, dict):
                 data = message
+            else:
+                logger.warning(f"Unknown message type: {type(message)}")
+                return
+
+            # data가 딕셔너리인지 확인
+            if not isinstance(data, dict):
+                logger.warning(f"Data is not a dict: {type(data)}")
+                return
 
             msg_type = data.get("type", "unknown")
 
@@ -330,11 +367,56 @@ class WebSocketVoiceHandler:
                 audio_data = base64.b64decode(data["data"])
                 result = await self.pipeline.process_audio(session.session_id, audio_data)
 
-                await self._send_message(websocket, VoiceMessage(
-                    type="response",
-                    data=result,
-                    session_id=session.session_id
-                ))
+                # 응답 전송
+                if result.get("status") == "success":
+                    # STT 결과 전송 (user_text 또는 transcribed_text 사용)
+                    user_text = result.get("user_text") or result.get("transcribed_text")
+                    if user_text:
+                        await self._send_message(websocket, VoiceMessage(
+                            type="transcript",
+                            data={
+                                "text": user_text,
+                                "is_final": True,
+                                "confidence": result.get("confidence", 1.0)
+                            },
+                            session_id=session.session_id
+                        ))
+                    
+                    # LLM 응답 전송
+                    if result.get("response_text"):
+                        await self._send_message(websocket, VoiceMessage(
+                            type="response_text",
+                            data={
+                                "text": result.get("response_text"),
+                                "is_complete": True
+                            },
+                            session_id=session.session_id
+                        ))
+                    
+                    # TTS 오디오 전송
+                    if result.get("response_audio"):
+                        response_audio = result.get("response_audio")
+                        # 바이트 데이터인지 확인
+                        if isinstance(response_audio, bytes):
+                            await websocket.send_bytes(response_audio)
+                        elif isinstance(response_audio, str):
+                            # base64 디코딩
+                            import base64
+                            await websocket.send_bytes(base64.b64decode(response_audio))
+                    
+                    # 처리 완료 알림
+                    await self._send_message(websocket, VoiceMessage(
+                        type="response_end",
+                        data={"status": "complete"},
+                        session_id=session.session_id
+                    ))
+                else:
+                    # 에러 처리
+                    await self._send_message(websocket, VoiceMessage(
+                        type="error",
+                        data={"error": result.get("error", "Processing failed")},
+                        session_id=session.session_id
+                    ))
 
             elif msg_type == "text":
                 # 텍스트 입력 (채팅 모드)
@@ -452,7 +534,8 @@ class WebSocketVoiceHandler:
         message: VoiceMessage
     ) -> None:
         """메시지 전송"""
-        await websocket.send(message.to_json())
+        # FastAPI WebSocket은 send_text() 또는 send_json() 사용
+        await websocket.send_text(message.to_json())
 
     def _cleanup_connection(self, session_id: str) -> None:
         """연결 정리"""

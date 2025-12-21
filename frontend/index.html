@@ -8,13 +8,18 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- face-api.js for face detection and emotion recognition -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 </head>
 <body>
     <!-- Header -->
     <header class="header">
         <div class="container">
             <div class="header-content">
-                <h1 class="logo">🧠 마음챗</h1>
+                <h1 class="logo">
+                    <img src="/static/images/logo.png" alt="마브 MINDBRIDGE" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+                    <span class="logo-text" style="display: none;">마브 MINDBRIDGE</span>
+                </h1>
                 <p class="tagline">당신의 마음을 이해하는 AI 심리상담</p>
                 <div class="user-info">
                     <button id="user-menu-btn" class="btn-icon">
@@ -39,17 +44,103 @@
                 <!-- Start Chat Section -->
                 <section class="user-input-section">
                     <div class="input-card" style="text-align: center;">
-                        <div class="start-chat-icon" style="font-size: 4rem; margin-bottom: 1.5rem;">🧠💬</div>
+                        <div class="start-chat-icon" style="margin-bottom: 1.5rem;">
+                            <img src="/static/images/counselor_avatar.png" alt="상담사" class="counselor-icon-large" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            <div style="display: none; font-size: 4rem;">🧠💬</div>
+                        </div>
                         <p style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.8;">
                             언제든지 편하게 대화를 시작하세요.<br>
                             당신의 감정과 고민을 함께 나누겠습니다.
                         </p>
-                        <button id="start-chat-btn" class="btn-primary" style="font-size: 1.2rem; padding: 1rem 3rem;">
-                            상담 시작하기
+                        <button id="start-chat-btn" class="btn-primary" style="font-size: 1.2rem; padding: 1rem 3rem;" disabled>
+                            시스템 초기화 중...
                         </button>
-                        <p style="margin-top: 1.5rem; font-size: 0.9rem; color: var(--text-secondary);">
+                        <p id="system-status-message" style="margin-top: 1rem; font-size: 0.9rem; color: var(--text-secondary); display: none;">
+                            시스템을 초기화하고 있습니다...
+                        </p>
+                        <p style="margin-top: 1rem; font-size: 0.9rem; color: var(--text-secondary);">
                             ※ 모든 대화는 안전하게 보호됩니다
                         </p>
+                    </div>
+                </section>
+
+                <!-- Features Section -->
+                <section class="features-section" style="margin-top: 4rem; padding: 2rem 0;">
+                    <h2 style="text-align: center; margin-bottom: 3rem; font-size: 2rem; color: var(--text-primary);">
+                        마음챗의 주요 기능
+                    </h2>
+                    <div class="features-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; max-width: 1200px; margin: 0 auto;">
+                        <!-- Feature 1: 페르소나 시스템 -->
+                        <div class="feature-card" style="background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s;">
+                            <div class="feature-icon" style="font-size: 3rem; margin-bottom: 1rem;">👥</div>
+                            <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem; color: var(--text-primary);">18명의 전문 상담사</h3>
+                            <p style="color: var(--text-secondary); line-height: 1.6; font-size: 0.95rem;">
+                                다양한 성격과 전문 분야를 가진 AI 상담사 중에서 선택하세요. 우울, 불안, 직장, 가족, 청소년 등 전문 분야별 상담이 가능합니다.
+                            </p>
+                        </div>
+
+                        <!-- Feature 2: 감정 분석 -->
+                        <div class="feature-card" style="background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s;">
+                            <div class="feature-icon" style="font-size: 3rem; margin-bottom: 1rem;">😊</div>
+                            <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem; color: var(--text-primary);">실시간 감정 분석</h3>
+                            <p style="color: var(--text-secondary); line-height: 1.6; font-size: 0.95rem;">
+                                대화 중 감정을 실시간으로 분석하고 이해합니다. 불안, 우울, 분노, 스트레스 등 다양한 감정을 인식하여 맞춤형 상담을 제공합니다.
+                            </p>
+                        </div>
+
+                        <!-- Feature 3: 위기 감지 -->
+                        <div class="feature-card" style="background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s;">
+                            <div class="feature-icon" style="font-size: 3rem; margin-bottom: 1rem;">🚨</div>
+                            <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem; color: var(--text-primary);">위기 상황 감지</h3>
+                            <p style="color: var(--text-secondary); line-height: 1.6; font-size: 0.95rem;">
+                                자살, 자해 등 위기 상황을 실시간으로 감지하고 즉시 전문기관 연계 정보를 제공합니다. 자살예방상담전화 1393 등 응급 리소스를 안내합니다.
+                            </p>
+                        </div>
+
+                        <!-- Feature 4: 심리 평가 -->
+                        <div class="feature-card" style="background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s;">
+                            <div class="feature-icon" style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+                            <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem; color: var(--text-primary);">심리 평가 도구</h3>
+                            <p style="color: var(--text-secondary); line-height: 1.6; font-size: 0.95rem;">
+                                PHQ-9(우울), GAD-7(불안), K-10(심리적 고통) 등 검증된 심리 평가 도구를 제공하여 현재 상태를 객관적으로 파악할 수 있습니다.
+                            </p>
+                        </div>
+
+                        <!-- Feature 5: 치료적 개입 -->
+                        <div class="feature-card" style="background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s;">
+                            <div class="feature-icon" style="font-size: 3rem; margin-bottom: 1rem;">💡</div>
+                            <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem; color: var(--text-primary);">치료적 기법 적용</h3>
+                            <p style="color: var(--text-secondary); line-height: 1.6; font-size: 0.95rem;">
+                                CBT(인지행동치료), ACT(수용전념치료), 마음챙김 등 검증된 치료 기법을 통합하여 효과적인 상담을 제공합니다.
+                            </p>
+                        </div>
+
+                        <!-- Feature 6: 음성 상담 -->
+                        <div class="feature-card" style="background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s;">
+                            <div class="feature-icon" style="font-size: 3rem; margin-bottom: 1rem;">🎤</div>
+                            <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem; color: var(--text-primary);">텍스트 & 음성 상담</h3>
+                            <p style="color: var(--text-secondary); line-height: 1.6; font-size: 0.95rem;">
+                                텍스트 채팅과 음성 채팅을 모두 지원합니다. 음성 인식(STT)과 음성 합성(TTS)을 통해 자연스러운 대화가 가능합니다.
+                            </p>
+                        </div>
+
+                        <!-- Feature 7: 한국 문화 이해 -->
+                        <div class="feature-card" style="background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s;">
+                            <div class="feature-icon" style="font-size: 3rem; margin-bottom: 1rem;">🇰🇷</div>
+                            <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem; color: var(--text-primary);">한국 문화 특화</h3>
+                            <p style="color: var(--text-secondary); line-height: 1.6; font-size: 0.95rem;">
+                                체면, 정(情), 한(恨), 집단주의 등 한국 문화의 특성을 이해하고 반영한 상담을 제공합니다. 한국어의 간접 표현도 정확히 이해합니다.
+                            </p>
+                        </div>
+
+                        <!-- Feature 8: 지식 베이스 -->
+                        <div class="feature-card" style="background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s;">
+                            <div class="feature-icon" style="font-size: 3rem; margin-bottom: 1rem;">📚</div>
+                            <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem; color: var(--text-primary);">전문 지식 통합</h3>
+                            <p style="color: var(--text-secondary); line-height: 1.6; font-size: 0.95rem;">
+                                RAG(검색 증강 생성) 시스템을 통해 심리상담 전문 지식 베이스를 활용하여 정확하고 전문적인 상담을 제공합니다.
+                            </p>
+                        </div>
                     </div>
                 </section>
             </div>
@@ -57,12 +148,17 @@
 
         <!-- Chat Screen -->
         <div id="chat-screen" class="screen">
-            <div class="chat-container">
-                <!-- Chat Header -->
+            <div class="chat-screen-wrapper">
+                <!-- 채팅 영역 -->
+                <div class="chat-container">
+                    <!-- Chat Header -->
                 <div class="chat-header">
                     <button id="back-to-home-btn" class="btn-icon">← 돌아가기</button>
                     <div class="counselor-info">
-                        <div class="counselor-avatar">🧠</div>
+                        <div class="counselor-avatar">
+                            <img src="/static/images/counselor_avatar.png" alt="상담사" class="counselor-avatar-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+                            <span style="display: none;">🧠</span>
+                        </div>
                         <div>
                             <h4>마음챗 AI 상담</h4>
                             <p>심리상담 서비스</p>
@@ -77,6 +173,7 @@
                         </button>
                     </div>
                     <button id="end-session-btn" class="btn-danger-small">상담 종료</button>
+                    <!-- 감정/치료 기법 상태 표시 영역 (동적 생성) -->
                 </div>
 
                 <!-- Chat Messages -->
@@ -87,7 +184,7 @@
                 </div>
 
                 <!-- Text Chat Input -->
-                <div class="chat-input-container" id="text-input-container">
+                <div class="chat-input-container" id="text-input-container" style="display: none;">
                     <div class="chat-input-wrapper">
                         <textarea id="chat-input" placeholder="메시지를 입력하세요..." rows="1"></textarea>
                         <button id="send-message-btn" class="btn-send">전송</button>
@@ -96,6 +193,7 @@
                         <small>💡 위기 상황 시 즉시 전문가의 도움을 받으세요: 자살예방상담전화 ☎️ 1393</small>
                     </div>
                 </div>
+
 
                 <!-- Voice Chat Input -->
                 <div class="voice-input-container" id="voice-input-container" style="display: none;">
@@ -150,6 +248,65 @@
                         <small>🎤 마이크 버튼 또는 스페이스바 | 🙌 자동 모드: 말하면 자동 인식 | ☎️ 1393</small>
                     </div>
                 </div>
+                </div>
+                
+                <!-- 웹캠 감정 분석 영역 (오른쪽 첫 번째) -->
+                <div class="camera-section" id="camera-section">
+                    <div class="camera-header">
+                        <h5>📷 실시간 감정 분석</h5>
+                    </div>
+                    <div class="camera-content">
+                        <div class="camera-video-wrapper">
+                            <video id="camera-video" autoplay playsinline style="display: none;"></video>
+                            <canvas id="camera-canvas"></canvas>
+                            <div id="camera-placeholder" class="camera-placeholder">
+                                <div style="text-align: center;">
+                                    <div style="font-size: 3rem; margin-bottom: 0.5rem;">📷</div>
+                                    <div>웹캠 초기화 중...</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="camera-emotion-display" class="camera-emotion-display">
+                            <div class="no-data">감정 분석 대기 중...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 감정/위기/치료 기법 사이드바 (오른쪽 두 번째) -->
+                <div id="emotion-sidebar" class="emotion-sidebar">
+                    <div class="sidebar-header">
+                        <h5>상담 정보</h5>
+                    </div>
+                    <div class="sidebar-content">
+                        <!-- 감정 표시 -->
+                        <div class="sidebar-section" id="emotion-section">
+                            <div class="section-title">현재 감정</div>
+                            <div class="emotion-display" id="sidebar-emotion-display">
+                                <div class="no-data">감정 분석 대기 중...</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 위기 감지 -->
+                        <div class="sidebar-section" id="crisis-section" style="display: none;">
+                            <div class="section-title">위기 감지</div>
+                            <div class="crisis-display" id="sidebar-crisis-display"></div>
+                        </div>
+                        
+                        <!-- 치료 기법 -->
+                        <div class="sidebar-section" id="therapy-section" style="display: none;">
+                            <div class="section-title">활성 치료 기법</div>
+                            <div class="therapy-display" id="sidebar-therapy-display"></div>
+                        </div>
+                        
+                        <!-- 감정 히스토리 -->
+                        <div class="sidebar-section" id="emotion-history-section">
+                            <div class="section-title">감정 추이</div>
+                            <div class="emotion-history" id="emotion-history-chart">
+                                <div class="no-data">감정 히스토리가 없습니다</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -160,7 +317,10 @@
                 <div class="voice-header">
                     <button id="voice-back-btn" class="btn-icon">← 돌아가기</button>
                     <div class="counselor-info">
-                        <div class="counselor-avatar">🧠</div>
+                        <div class="counselor-avatar">
+                            <img src="/static/images/counselor_avatar.png" alt="상담사" class="counselor-avatar-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+                            <span style="display: none;">🧠</span>
+                        </div>
                         <div>
                             <h4>마음챗 AI 상담</h4>
                             <p id="voice-connection-status">연결 중...</p>
@@ -174,7 +334,10 @@
                     <!-- Counselor Response -->
                     <div class="voice-response-area">
                         <div class="counselor-speaking-indicator" id="counselor-speaking">
-                            <div class="speaking-avatar" id="speaking-avatar">👨‍⚕️</div>
+                            <div class="speaking-avatar" id="speaking-avatar">
+                                <img src="/static/images/counselor_avatar.png" alt="상담사" class="speaking-avatar-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+                                <span style="display: none;">👨‍⚕️</span>
+                            </div>
                             <div class="speaking-waves">
                                 <span></span><span></span><span></span><span></span><span></span>
                             </div>
@@ -428,6 +591,7 @@
     <script src="/static/voice.js"></script>
     <script src="/static/audio-visualizer.js"></script>
     <script src="/static/voice-app.js"></script>
-    <script src="/static/app.js"></script>
+    <script src="/static/face-emotion-detector.js"></script>
+    <script type="module" src="/static/app.js"></script>
 </body>
 </html>

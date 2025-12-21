@@ -39,26 +39,28 @@ except ImportError:
 class OpenAIConfig:
     """OpenAI API 설정"""
     api_key: Optional[str] = None
-    model: str = "gpt-4o-mini"  # gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-5.1
+    model: str = "gpt-5.2"  # gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-5.1, gpt-5.2
     temperature: float = 0.7
     max_tokens: int = 500
     top_p: float = 0.9
     frequency_penalty: float = 0.0
     presence_penalty: float = 0.0
     
-    # GPT-5.1 전용 설정
-    reasoning_effort: str = "medium"  # low, medium, high (GPT-5.1용)
+    # GPT-5.1/5.2 전용 설정
+    reasoning_effort: str = "none"  # none, low, medium, high (GPT-5.1/5.2용)
 
     # 비용 추적
     track_cost: bool = True
 
     # 모델별 가격 (1K 토큰당 USD)
+    # GPT-5.2: 입력 $1.75/1M = $0.00175/1K, 출력 $14/1M = $0.014/1K
     pricing: Dict[str, Dict[str, float]] = field(default_factory=lambda: {
         "gpt-4o": {"input": 0.005, "output": 0.015},
         "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
         "gpt-4-turbo": {"input": 0.01, "output": 0.03},
         "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},
         "gpt-5.1": {"input": 0.003, "output": 0.012},  # GPT-5.1 가격 (추정)
+        "gpt-5.2": {"input": 0.00175, "output": 0.014},  # GPT-5.2 가격 (입력: $1.75/1M, 출력: $14/1M)
         "gpt-5.1-codex": {"input": 0.005, "output": 0.015}
     })
 
@@ -179,8 +181,8 @@ class OpenAICounselor(LLMInterface):
         self.detected_emotions = []
         self.risk_level = 0.0
 
-        # GPT-5.1 모델 여부 확인
-        self.use_responses_api = self.config.model.startswith("gpt-5")
+        # GPT-5.1/5.2 모델 여부 확인 (Chat Completions API 사용)
+        self.use_gpt5_model = self.config.model.startswith("gpt-5")
 
         self._initialize_client()
         logger.info(f"OpenAICounselor initialized with model={self.config.model}")
@@ -232,32 +234,38 @@ class OpenAICounselor(LLMInterface):
                 }
                 self.system_prompt = self.prompt_template.get_system_prompt(context)
 
-            # GPT-5.1: Responses API 사용
-            if self.use_responses_api:
-                response_text = self._generate_with_responses_api(user_message, conversation_history)
+            # 모든 모델: Chat Completions API 사용 (GPT-5.2도 chat/completions 사용)
+            messages = self._build_messages(user_message, conversation_history)
+            
+            # API 호출 파라미터 구성
+            api_params = {
+                "model": self.config.model,
+                "messages": messages,
+                "temperature": self.config.temperature,
+                "top_p": self.config.top_p,
+                "frequency_penalty": self.config.frequency_penalty,
+                "presence_penalty": self.config.presence_penalty
+            }
+            
+            # GPT-5.1/5.2 모델인 경우 max_completion_tokens 사용, 그 외는 max_tokens 사용
+            if self.use_gpt5_model:
+                api_params["max_completion_tokens"] = self.config.max_tokens
+                api_params["reasoning_effort"] = self.config.reasoning_effort
             else:
-                # 기존 모델: Chat Completions API 사용
-                messages = self._build_messages(user_message, conversation_history)
-                response = self.client.chat.completions.create(
+                api_params["max_tokens"] = self.config.max_tokens
+            
+            response = self.client.chat.completions.create(**api_params)
+
+            # 토큰 사용량 추적
+            if self.config.track_cost and response.usage:
+                self.stats.update(
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
                     model=self.config.model,
-                    messages=messages,
-                    temperature=self.config.temperature,
-                    max_tokens=self.config.max_tokens,
-                    top_p=self.config.top_p,
-                    frequency_penalty=self.config.frequency_penalty,
-                    presence_penalty=self.config.presence_penalty
+                    pricing=self.config.pricing
                 )
 
-                # 토큰 사용량 추적
-                if self.config.track_cost and response.usage:
-                    self.stats.update(
-                        input_tokens=response.usage.prompt_tokens,
-                        output_tokens=response.usage.completion_tokens,
-                        model=self.config.model,
-                        pricing=self.config.pricing
-                    )
-
-                response_text = response.choices[0].message.content.strip()
+            response_text = response.choices[0].message.content.strip()
 
             # 응답 품질 평가 (로깅용)
             if USE_ENHANCED_PROMPTS and self.evaluator:
@@ -348,19 +356,27 @@ class OpenAICounselor(LLMInterface):
     ) -> str:
         """응답 생성 (비동기)"""
         try:
-            # GPT-5.1: Responses API 사용 (비동기)
-            if self.use_responses_api:
-                return await self._generate_with_responses_api_async(user_message, conversation_history)
-            
-            # 기존 모델: Chat Completions API 사용
+            # 모든 모델: Chat Completions API 사용 (비동기)
             messages = self._build_messages(user_message, conversation_history)
-            response = await self.async_client.chat.completions.create(
-                model=self.config.model,
-                messages=messages,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                top_p=self.config.top_p
-            )
+            
+            # API 호출 파라미터 구성
+            api_params = {
+                "model": self.config.model,
+                "messages": messages,
+                "temperature": self.config.temperature,
+                "top_p": self.config.top_p,
+                "frequency_penalty": self.config.frequency_penalty,
+                "presence_penalty": self.config.presence_penalty
+            }
+            
+            # GPT-5.1/5.2 모델인 경우 max_completion_tokens 사용, 그 외는 max_tokens 사용
+            if self.use_gpt5_model:
+                api_params["max_completion_tokens"] = self.config.max_tokens
+                api_params["reasoning_effort"] = self.config.reasoning_effort
+            else:
+                api_params["max_tokens"] = self.config.max_tokens
+            
+            response = await self.async_client.chat.completions.create(**api_params)
 
             if self.config.track_cost and response.usage:
                 self.stats.update(
@@ -442,13 +458,19 @@ class OpenAICounselor(LLMInterface):
         messages = self._build_messages(user_message, conversation_history)
 
         try:
-            stream = self.client.chat.completions.create(
-                model=self.config.model,
-                messages=messages,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                stream=True
-            )
+            # GPT-5.1/5.2 모델인 경우 max_completion_tokens 사용, 그 외는 max_tokens 사용
+            stream_params = {
+                "model": self.config.model,
+                "messages": messages,
+                "temperature": self.config.temperature,
+                "stream": True
+            }
+            if self.use_gpt5_model:
+                stream_params["max_completion_tokens"] = self.config.max_tokens
+            else:
+                stream_params["max_tokens"] = self.config.max_tokens
+            
+            stream = self.client.chat.completions.create(**stream_params)
 
             for chunk in stream:
                 if chunk.choices[0].delta.content:
@@ -467,13 +489,19 @@ class OpenAICounselor(LLMInterface):
         messages = self._build_messages(user_message, conversation_history)
 
         try:
-            stream = await self.async_client.chat.completions.create(
-                model=self.config.model,
-                messages=messages,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                stream=True
-            )
+            # GPT-5.1/5.2 모델인 경우 max_completion_tokens 사용, 그 외는 max_tokens 사용
+            stream_params = {
+                "model": self.config.model,
+                "messages": messages,
+                "temperature": self.config.temperature,
+                "stream": True
+            }
+            if self.use_gpt5_model:
+                stream_params["max_completion_tokens"] = self.config.max_tokens
+            else:
+                stream_params["max_tokens"] = self.config.max_tokens
+            
+            stream = await self.async_client.chat.completions.create(**stream_params)
 
             async for chunk in stream:
                 if chunk.choices[0].delta.content:
@@ -618,7 +646,7 @@ def main():
         sys.exit(1)
 
     # 모델 선택
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    model = os.getenv("OPENAI_MODEL", "gpt-5.2")
     print(f"\n모델: {model}")
     print("종료하려면 'quit' 또는 'q' 입력\n")
 

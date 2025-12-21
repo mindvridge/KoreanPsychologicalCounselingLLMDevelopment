@@ -1,0 +1,7 @@
+{
+  "name": "seoyun_teacher",
+  "description": "서윤쌤 목소리 (ElevenLabs 클론)",
+  "language": "ko",
+  "reference_audio_path": "C:\\KoreanPsychologicalCounselingLLMDevelopment\\data\\ElevenLabs_2025-12-09T05_45_40_서윤쌤 1_gen_sp80_s50_sb75_v3.mp3",
+  "embedding_path": "C:\\KoreanPsychologicalCounselingLLMDevelopment\\voice_profiles\\seoyun_teacher.embedding.npy"
+}

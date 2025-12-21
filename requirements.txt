@@ -1,5 +1,5 @@
 # Core Deep Learning Framework
-torch>=2.0.0
+torch>=2.6.0  # CVE-2025-32434 보안 취약점 해결을 위해 2.6 이상 필요
 transformers>=4.35.0
 accelerate>=0.24.0
 bitsandbytes>=0.41.0  # 4-bit quantization support
@@ -22,6 +22,10 @@ konlpy>=0.6.0
 # Data Processing
 pandas>=2.0.0
 numpy>=1.24.0
+Pillow>=10.0.0  # Image processing
+opencv-python>=4.8.0  # Image processing and face detection
+deepface>=0.0.79  # Advanced facial emotion analysis
+tf-keras>=2.20.0  # Required for DeepFace with TensorFlow 2.20+
 
 # Configuration and Environment
 pyyaml>=6.0

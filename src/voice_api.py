@@ -100,9 +100,15 @@ async def get_pipeline():
     global _pipeline
 
     if _pipeline is None:
-        from voice_streaming import VoiceStreamingPipeline
-        _pipeline = VoiceStreamingPipeline()
-        await _pipeline.initialize()
+        try:
+            logger.info("Initializing VoiceStreamingPipeline...")
+            from .voice_streaming import VoiceStreamingPipeline
+            _pipeline = VoiceStreamingPipeline()
+            await _pipeline.initialize()
+            logger.info("VoiceStreamingPipeline initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize pipeline: {e}", exc_info=True)
+            raise
 
     return _pipeline
 
@@ -114,7 +120,7 @@ async def get_or_create_session(session_id: Optional[str], mode: str = "hybrid")
     if session_id and session_id in _sessions:
         return _sessions[session_id]
 
-    from voice_streaming import UnifiedCounselingSession, CounselingSessionConfig, VoiceCounselingMode
+    from .voice_streaming import UnifiedCounselingSession, CounselingSessionConfig, VoiceCounselingMode
 
     config = CounselingSessionConfig(mode=VoiceCounselingMode(mode))
     session = UnifiedCounselingSession(config, await get_pipeline())
@@ -399,21 +405,37 @@ async def websocket_voice_endpoint(websocket: WebSocket, session_id: Optional[st
 
     양방향 실시간 음성 스트리밍
     """
-    await websocket.accept()
+    try:
+        await websocket.accept()
+        logger.info(f"WebSocket connection accepted: {session_id}")
+    except Exception as e:
+        logger.error(f"Failed to accept WebSocket connection: {e}", exc_info=True)
+        return
 
     try:
+        logger.info(f"Getting pipeline for session: {session_id}")
         pipeline = await get_pipeline()
+        
+        if pipeline is None:
+            logger.error("Pipeline is None - cannot handle WebSocket connection")
+            await websocket.close(code=1011, reason="Pipeline not initialized")
+            return
 
-        from voice_streaming import WebSocketVoiceHandler
+        from .voice_streaming import WebSocketVoiceHandler
         handler = WebSocketVoiceHandler(pipeline)
 
+        logger.info(f"Starting WebSocket handler for session: {session_id}")
         await handler.handle_connection(websocket, session_id)
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected: {session_id}")
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
-        await websocket.close(code=1011, reason=str(e))
+        logger.error(f"WebSocket error: {e}", exc_info=True)
+        try:
+            error_message = str(e)[:123]  # WebSocket close reason은 최대 123바이트
+            await websocket.close(code=1011, reason=error_message)
+        except Exception as close_error:
+            logger.error(f"Failed to close WebSocket: {close_error}")
 
 
 @app.websocket("/ws/chat/{session_id}")

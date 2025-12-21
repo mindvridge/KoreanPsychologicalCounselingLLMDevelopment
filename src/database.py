@@ -47,7 +47,7 @@ class User(Base):
     crisis_count = Column(Integer, default=0)
 
     # Relationships
-    metadata = relationship("UserMetadata", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    user_metadata = relationship("UserMetadata", back_populates="user", uselist=False, cascade="all, delete-orphan")
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
     assessments = relationship("Assessment", back_populates="user", cascade="all, delete-orphan")
 

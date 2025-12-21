@@ -93,10 +93,22 @@ class VoiceChat {
 
             // Connect nodes
             this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
+            // analyserNode를 먼저 연결 (파형 표시용)
             this.sourceNode.connect(this.analyserNode);
 
             // Setup processor for audio data
             await this.setupAudioProcessor();
+            
+            // processorNode도 analyserNode에 연결하여 파형 데이터 공유
+            if (this.processorNode && this.analyserNode) {
+                // analyserNode는 이미 sourceNode에서 데이터를 받고 있으므로
+                // processorNode는 별도로 연결하지 않아도 됨
+                console.log('Audio nodes connected:', {
+                    source: !!this.sourceNode,
+                    analyser: !!this.analyserNode,
+                    processor: !!this.processorNode
+                });
+            }
 
             // Connect to WebSocket
             await this.connectWebSocket();
@@ -118,6 +130,10 @@ class VoiceChat {
                 await this.audioContext.audioWorklet.addModule(this.createAudioWorkletProcessor());
                 this.processorNode = new AudioWorkletNode(this.audioContext, 'voice-processor');
                 this.processorNode.port.onmessage = (event) => {
+                    // 항상 오디오 레벨 업데이트 (파형 표시용)
+                    this.updateAudioLevel(event.data);
+                    
+                    // 녹음 중일 때만 오디오 데이터 전송
                     if (this.isRecording && !this.isPaused) {
                         this.processAudioData(event.data);
                     }
@@ -169,14 +185,27 @@ class VoiceChat {
         );
 
         this.processorNode.onaudioprocess = (event) => {
+            const inputData = event.inputBuffer.getChannelData(0);
+            // 항상 오디오 레벨 업데이트 (파형 표시용)
+            this.updateAudioLevel(inputData);
+            
+            // 녹음 중일 때만 오디오 데이터 전송
             if (this.isRecording && !this.isPaused) {
-                const inputData = event.inputBuffer.getChannelData(0);
                 this.processAudioData(new Float32Array(inputData));
             }
         };
 
+        // sourceNode를 processorNode에 연결 (녹음 데이터 처리용)
+        // analyserNode는 이미 sourceNode에 연결되어 있으므로 파형은 계속 표시됨
         this.sourceNode.connect(this.processorNode);
-        this.processorNode.connect(this.audioContext.destination);
+        
+        // ScriptProcessor가 작동하려면 출력이 필요함
+        // 실제 스피커 출력은 하지 않기 위해 dummy destination 사용
+        // createMediaStreamDestination()을 사용하면 실제 출력 없이 처리 가능
+        const dummyDestination = this.audioContext.createMediaStreamDestination();
+        this.processorNode.connect(dummyDestination);
+        // dummyDestination은 사용하지 않으므로 연결만 유지 (가비지 컬렉션 방지)
+        this._dummyDestination = dummyDestination;
     }
 
     // =========================================================================
@@ -186,49 +215,85 @@ class VoiceChat {
     async connectWebSocket() {
         return new Promise((resolve, reject) => {
             const wsUrl = `${this.options.wsUrl}/ws/voice/${this.sessionId}`;
+            console.log(`Connecting to WebSocket: ${wsUrl}`);
 
-            this.ws = new WebSocket(wsUrl);
-            this.ws.binaryType = 'arraybuffer';
+            try {
+                this.ws = new WebSocket(wsUrl);
+                this.ws.binaryType = 'arraybuffer';
 
-            this.ws.onopen = () => {
-                console.log('WebSocket connected');
-                this.isConnected = true;
-                this.reconnectAttempts = 0;
+                // 연결 타임아웃 설정
+                const connectTimeout = setTimeout(() => {
+                    if (!this.isConnected) {
+                        console.error('WebSocket connection timeout');
+                        this.ws.close();
+                        reject(new Error('WebSocket connection timeout'));
+                    }
+                }, 10000); // 10초 타임아웃
 
-                // Send session info
-                this.ws.send(JSON.stringify({
-                    type: 'session_start',
-                    session_id: this.sessionId,
-                    counselor_id: this.counselorId,
-                    sample_rate: this.options.sampleRate
-                }));
+                this.ws.onopen = () => {
+                    clearTimeout(connectTimeout);
+                    console.log('WebSocket connected');
+                    this.isConnected = true;
+                    this.reconnectAttempts = 0;
 
-                this.onStateChange({ state: 'connected', message: '서버 연결됨' });
-                resolve();
-            };
+                    // Send session info
+                    try {
+                        this.ws.send(JSON.stringify({
+                            type: 'session_start',
+                            session_id: this.sessionId,
+                            counselor_id: this.counselorId,
+                            sample_rate: this.options.sampleRate
+                        }));
+                    } catch (e) {
+                        console.error('Failed to send session info:', e);
+                    }
 
-            this.ws.onmessage = (event) => {
-                this.handleWebSocketMessage(event);
-            };
+                    this.onStateChange({ state: 'connected', message: '서버 연결됨' });
+                    resolve();
+                };
 
-            this.ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                this.onError({ type: 'websocket', message: '연결 오류가 발생했습니다' });
-            };
+                this.ws.onmessage = (event) => {
+                    this.handleWebSocketMessage(event);
+                };
 
-            this.ws.onclose = (event) => {
-                console.log('WebSocket closed:', event.code, event.reason);
-                this.isConnected = false;
-                this.onStateChange({ state: 'disconnected', message: '연결 끊김' });
+                this.ws.onerror = (error) => {
+                    clearTimeout(connectTimeout);
+                    console.error('WebSocket error:', error);
+                    console.error('WebSocket URL:', wsUrl);
+                    this.onError({ 
+                        type: 'websocket', 
+                        message: '연결 오류가 발생했습니다',
+                        error: error,
+                        url: wsUrl
+                    });
+                    reject(error);
+                };
 
-                // Attempt reconnection
-                if (this.reconnectAttempts < this.maxReconnectAttempts) {
-                    setTimeout(() => {
-                        this.reconnectAttempts++;
-                        this.connectWebSocket();
-                    }, this.reconnectDelay * Math.pow(2, this.reconnectAttempts));
-                }
-            };
+                this.ws.onclose = (event) => {
+                    clearTimeout(connectTimeout);
+                    console.log('WebSocket closed:', event.code, event.reason);
+                    this.isConnected = false;
+                    this.onStateChange({ state: 'disconnected', message: '연결 끊김' });
+
+                    // Attempt reconnection
+                    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                        setTimeout(() => {
+                            this.reconnectAttempts++;
+                            this.connectWebSocket();
+                        }, this.reconnectDelay * Math.pow(2, this.reconnectAttempts));
+                    }
+                };
+
+            } catch (error) {
+                clearTimeout(connectTimeout);
+                console.error('WebSocket connection error:', error);
+                this.onError({ 
+                    type: 'websocket', 
+                    message: '연결 설정 중 오류가 발생했습니다',
+                    error: error
+                });
+                reject(error);
+            }
 
             // Timeout
             setTimeout(() => {
@@ -279,6 +344,27 @@ class VoiceChat {
                 this.onStateChange({ state: 'ready', message: '대기 중' });
                 break;
 
+            case 'response':
+                // 서버에서 보낸 전체 응답 (하위 호환성)
+                if (message.data) {
+                    const data = message.data;
+                    if (data.transcribed_text) {
+                        this.onTranscript({
+                            text: data.transcribed_text,
+                            isFinal: true,
+                            confidence: data.confidence || 1.0
+                        });
+                    }
+                    if (data.response_text) {
+                        this.onResponse({
+                            text: data.response_text,
+                            isComplete: true
+                        });
+                    }
+                }
+                this.onStateChange({ state: 'ready', message: '대기 중' });
+                break;
+
             case 'tts_start':
                 this.onPlaybackStart();
                 break;
@@ -288,7 +374,7 @@ class VoiceChat {
                 break;
 
             case 'error':
-                this.onError({ type: message.error_type, message: message.message });
+                this.onError({ type: message.error_type || 'unknown', message: message.message || message.data?.error || 'Unknown error' });
                 break;
 
             case 'safety_alert':
@@ -299,8 +385,18 @@ class VoiceChat {
                 });
                 break;
 
+            case 'connected':
+                // 서버 연결 확인 메시지 (무시하거나 로그만 남김)
+                console.log('Server connection confirmed');
+                break;
+
+            case 'session_start':
+                // 세션 시작 확인
+                console.log('Session started:', message.session_id);
+                break;
+
             default:
-                console.log('Unknown message type:', message.type);
+                console.log('Unknown message type:', message.type, message);
         }
     }
 
@@ -308,10 +404,15 @@ class VoiceChat {
     // Audio Processing
     // =========================================================================
 
-    processAudioData(audioData) {
-        // Calculate audio level for visualization
+    updateAudioLevel(audioData) {
+        // Calculate audio level for visualization (항상 업데이트 - 파형 표시용)
         const level = this.calculateAudioLevel(audioData);
         this.onAudioLevel(level);
+    }
+
+    processAudioData(audioData) {
+        // Calculate audio level
+        const level = this.calculateAudioLevel(audioData);
 
         // Voice Activity Detection
         if (this.options.vadEnabled) {
@@ -319,7 +420,8 @@ class VoiceChat {
         }
 
         // Send audio data if speaking or VAD disabled
-        if (!this.options.vadEnabled || this.isSpeaking) {
+        // 녹음 중일 때는 VAD를 무시하고 항상 전송 (서버에서 처리)
+        if (!this.options.vadEnabled || this.isSpeaking || this.isRecording) {
             this.sendAudioData(audioData);
         }
     }
@@ -352,10 +454,21 @@ class VoiceChat {
     }
 
     sendAudioData(audioData) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            return; // WebSocket이 열려있지 않으면 전송하지 않음
+        }
+        
+        if (!this.isRecording) {
+            return; // 녹음 중이 아니면 전송하지 않음
+        }
+        
+        try {
             // Convert Float32 to Int16 for transmission
             const int16Data = this.float32ToInt16(audioData);
             this.ws.send(int16Data.buffer);
+        } catch (error) {
+            console.error('Error sending audio data:', error);
+            // 에러가 발생해도 계속 녹음은 유지
         }
     }
 
@@ -421,24 +534,44 @@ class VoiceChat {
             return false;
         }
 
-        if (this.audioContext.state === 'suspended') {
-            this.audioContext.resume();
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            this.onError({ type: 'websocket', message: 'WebSocket이 열려있지 않습니다' });
+            return false;
         }
 
-        this.isRecording = true;
-        this.isPaused = false;
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            this.audioContext.resume().catch(error => {
+                console.error('Failed to resume audio context:', error);
+                this.onError({ type: 'audio', message: '오디오 컨텍스트를 재개할 수 없습니다' });
+            });
+        }
 
-        this.ws.send(JSON.stringify({ type: 'start_recording' }));
-        this.onStateChange({ state: 'recording', message: '녹음 중...' });
+        try {
+            this.isRecording = true;
+            this.isPaused = false;
+            this.isSpeaking = true; // 녹음 시작 시 즉시 전송 시작
 
-        return true;
+            // 서버에 녹음 시작 알림
+            this.ws.send(JSON.stringify({ type: 'start_recording' }));
+            console.log('Recording started, sending audio data...');
+            
+            this.onStateChange({ state: 'recording', message: '녹음 중...' });
+            return true;
+        } catch (error) {
+            console.error('Error starting recording:', error);
+            this.onError({ type: 'recording', message: `녹음 시작 실패: ${error.message || error}` });
+            this.isRecording = false;
+            return false;
+        }
     }
 
     stopRecording() {
         this.isRecording = false;
+        this.isSpeaking = false;
 
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({ type: 'stop_recording' }));
+            console.log('Recording stopped, waiting for response...');
         }
 
         this.onStateChange({ state: 'processing', message: '처리 중...' });
@@ -477,7 +610,8 @@ class VoiceChat {
     getTimeDomainData() {
         if (!this.analyserNode) return new Uint8Array(0);
 
-        const dataArray = new Uint8Array(this.analyserNode.frequencyBinCount);
+        // 시간 도메인 데이터는 fftSize를 사용해야 함 (frequencyBinCount는 주파수 도메인용)
+        const dataArray = new Uint8Array(this.analyserNode.fftSize);
         this.analyserNode.getByteTimeDomainData(dataArray);
         return dataArray;
     }

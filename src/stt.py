@@ -79,6 +79,11 @@ class WhisperSTT:
             use_faster_whisper: faster-whisper 사용 여부 (더 빠름)
             vad_config: 음성 활동 감지 설정
         """
+        # GPU 필수 - 감지 실패 시 상세 에러 로그와 함께 예외 발생
+        if device == "cuda":
+            from src.gpu_check import require_gpu
+            device = require_gpu("cuda")
+        
         self.model_size = model_size
         self.device = device
         self.compute_type = compute_type
@@ -133,8 +138,14 @@ class WhisperSTT:
             self._model_type = "openai_whisper"
             logger.info("openai-whisper model loaded")
 
-        except ImportError:
-            raise ImportError("whisper not installed. Run: pip install openai-whisper")
+        except ImportError as e:
+            error_msg = f"whisper not installed. Run: pip install openai-whisper. Original error: {e}"
+            logger.error(error_msg)
+            raise ImportError(error_msg)
+        except Exception as e:
+            error_msg = f"Failed to load whisper model: {e}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
 
     def _load_vad(self) -> None:
         """VAD (Voice Activity Detection) 로드"""

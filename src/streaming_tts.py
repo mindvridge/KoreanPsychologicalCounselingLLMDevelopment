@@ -13,6 +13,7 @@ import logging
 import asyncio
 import numpy as np
 import re
+import struct
 from typing import Optional, AsyncGenerator, List, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -39,8 +40,8 @@ class AudioChunk:
 class StreamingTTSConfig:
     """스트리밍 TTS 설정"""
     sample_rate: int = 24000
-    chunk_size_ms: int = 100  # 출력 청크 크기
-    sentence_pause_ms: int = 300  # 문장 사이 휴지
+    chunk_size_ms: int = 0  # 0이면 문장 전체를 하나의 청크로 전송 (찢어짐 방지)
+    sentence_pause_ms: int = 200  # 문장 사이 휴지
     voice_profile: str = "seoyun_counselor"
     default_emotion: str = "calm"
     speed: float = 1.0
@@ -124,6 +125,11 @@ class StreamingTTS:
         config: Optional[StreamingTTSConfig] = None,
         device: str = "cuda"
     ):
+        # GPU 필수 - 감지 실패 시 상세 에러 로그와 함께 예외 발생
+        if device == "cuda":
+            from src.gpu_check import require_gpu
+            device = require_gpu("cuda")
+        
         self.config = config or StreamingTTSConfig()
         self.device = device
 
@@ -189,28 +195,28 @@ class StreamingTTS:
         for i, sentence in enumerate(sentences):
             is_last = (i == len(sentences) - 1)
 
-            # 문장 합성
-            audio_data = await self._synthesize_sentence(sentence, emotion)
+            # 문장 합성 - WAV 바이트 반환
+            wav_bytes = await self._synthesize_sentence(sentence, emotion)
 
-            if audio_data is not None:
-                # 청크로 분할하여 출력
-                async for chunk in self._chunk_audio(
-                    audio_data,
-                    sentence,
-                    is_last,
-                    emotion
-                ):
-                    yield chunk
+            if wav_bytes is not None:
+                # WAV 바이트를 직접 AudioChunk로 변환 (이미 완성된 WAV)
+                # WAV 헤더에서 정보 추출
+                duration_ms = self._get_wav_duration_ms(wav_bytes)
+                
+                yield AudioChunk(
+                    data=wav_bytes,
+                    sample_rate=self.config.sample_rate,
+                    duration_ms=duration_ms,
+                    text=sentence,
+                    is_last=is_last,
+                    emotion=emotion
+                )
 
-                # 문장 사이 휴지
-                if not is_last:
-                    pause_samples = int(
-                        self.config.sample_rate *
-                        self.config.sentence_pause_ms / 1000
-                    )
-                    pause_audio = np.zeros(pause_samples, dtype=np.float32)
+                # 문장 사이 휴지 (마지막 문장이 아닌 경우)
+                if not is_last and self.config.sentence_pause_ms > 0:
+                    pause_wav = self._create_silence_wav(self.config.sentence_pause_ms)
                     yield AudioChunk(
-                        data=pause_audio.tobytes(),
+                        data=pause_wav,
                         sample_rate=self.config.sample_rate,
                         duration_ms=self.config.sentence_pause_ms,
                         text="",
@@ -238,38 +244,49 @@ class StreamingTTS:
         emotion = emotion or self.config.default_emotion
 
         async for sentence in SentenceSplitter.stream_split(text_stream):
-            audio_data = await self._synthesize_sentence(sentence, emotion)
+            wav_bytes = await self._synthesize_sentence(sentence, emotion)
 
-            if audio_data is not None:
-                async for chunk in self._chunk_audio(
-                    audio_data,
-                    sentence,
-                    False,  # 스트림이므로 마지막 판단 어려움
-                    emotion
-                ):
-                    yield chunk
+            if wav_bytes is not None:
+                duration_ms = self._get_wav_duration_ms(wav_bytes)
+                yield AudioChunk(
+                    data=wav_bytes,
+                    sample_rate=self.config.sample_rate,
+                    duration_ms=duration_ms,
+                    text=sentence,
+                    is_last=False,  # 스트림이므로 마지막 판단 어려움
+                    emotion=emotion
+                )
 
     async def _synthesize_sentence(
         self,
         sentence: str,
         emotion: str
-    ) -> Optional[np.ndarray]:
-        """단일 문장 합성"""
+    ) -> Optional[bytes]:
+        """단일 문장 합성 - WAV 바이트 반환"""
         try:
             if self.engine is None:
-                # Fallback: gTTS 사용
-                return await self._synthesize_gtts(sentence)
+                # Fallback: gTTS 사용 (numpy 반환 후 WAV로 변환)
+                audio_np = await self._synthesize_gtts(sentence)
+                if audio_np is not None:
+                    # numpy를 WAV로 변환
+                    import soundfile as sf
+                    import io
+                    buffer = io.BytesIO()
+                    sf.write(buffer, audio_np, self.config.sample_rate, format='wav', subtype='PCM_16')
+                    buffer.seek(0)
+                    return buffer.read()
+                return None
 
-            # Zonos TTS 사용
+            # Zonos TTS 사용 - WAV 바이트 직접 반환
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
+            wav_bytes = await loop.run_in_executor(
                 None,
                 self._run_synthesis,
                 sentence,
                 emotion
             )
 
-            return result
+            return wav_bytes
 
         except Exception as e:
             logger.error(f"문장 합성 오류: {e}")
@@ -279,21 +296,31 @@ class StreamingTTS:
         self,
         text: str,
         emotion: str
-    ) -> Optional[np.ndarray]:
-        """실제 합성 수행 (동기)"""
+    ) -> Optional[bytes]:
+        """실제 합성 수행 (동기) - WAV 바이트로 반환"""
         try:
             # 음성 프로필 설정
             voice_settings = self._get_emotion_settings(emotion)
+            
+            # SpeechConfig 생성 (ZonosTTS.synthesize()는 config를 받음)
+            from src.tts import SpeechConfig
+            speed_factor = voice_settings.get("speed_factor", 1.0)
+            speech_config = SpeechConfig(
+                speaking_rate=self.config.speed * speed_factor,
+                emotion=emotion,
+                sample_rate=self.config.sample_rate
+            )
 
             result = self.engine.synthesize(
                 text=text,
                 voice_profile=self.config.voice_profile,
-                speed=self.config.speed * voice_settings.get("speed_factor", 1.0),
-                emotion=emotion
+                config=speech_config
             )
 
-            if result and hasattr(result, 'audio'):
-                return result.audio
+            if result:
+                # SynthesisResult의 to_bytes() 사용 (검증된 WAV 변환)
+                wav_bytes = result.to_bytes(format="wav")
+                return wav_bytes
 
         except Exception as e:
             logger.error(f"Synthesis error: {e}")
@@ -346,6 +373,71 @@ class StreamingTTS:
         }
         return settings.get(emotion, settings["calm"])
 
+    def _get_wav_duration_ms(self, wav_bytes: bytes) -> float:
+        """WAV 바이트에서 오디오 길이(ms) 추출"""
+        try:
+            if len(wav_bytes) < 44:
+                return 0.0
+            
+            # WAV 헤더에서 정보 추출 (리틀 엔디안)
+            # 바이트 24-27: 샘플 레이트
+            # 바이트 34-35: 비트 per 샘플
+            # 바이트 40-43: 데이터 크기
+            sample_rate = struct.unpack('<I', wav_bytes[24:28])[0]
+            bits_per_sample = struct.unpack('<H', wav_bytes[34:36])[0]
+            data_size = struct.unpack('<I', wav_bytes[40:44])[0]
+            
+            # 채널 수 (바이트 22-23)
+            num_channels = struct.unpack('<H', wav_bytes[22:24])[0]
+            
+            # 샘플 수 계산
+            bytes_per_sample = bits_per_sample // 8
+            num_samples = data_size // (bytes_per_sample * num_channels)
+            
+            # 길이(ms) 계산
+            duration_ms = (num_samples / sample_rate) * 1000
+            return duration_ms
+        except Exception as e:
+            logger.warning(f"Failed to get WAV duration: {e}")
+            return 0.0
+
+    def _create_silence_wav(self, duration_ms: float) -> bytes:
+        """지정된 길이의 무음 WAV 생성"""
+        num_samples = int(self.config.sample_rate * duration_ms / 1000)
+        silence = np.zeros(num_samples, dtype=np.int16)
+        pcm_data = silence.tobytes()
+        
+        wav_header = self._create_wav_header(
+            len(pcm_data),
+            self.config.sample_rate,
+            num_channels=1,
+            bits_per_sample=16
+        )
+        return wav_header + pcm_data
+
+    def _create_wav_header(self, data_size: int, sample_rate: int, num_channels: int = 1, bits_per_sample: int = 16) -> bytes:
+        """WAV 파일 헤더 생성"""
+        byte_rate = sample_rate * num_channels * bits_per_sample // 8
+        block_align = num_channels * bits_per_sample // 8
+        
+        header = struct.pack(
+            '<4sI4s4sIHHIIHH4sI',
+            b'RIFF',
+            data_size + 36,  # 파일 크기 - 8
+            b'WAVE',
+            b'fmt ',
+            16,  # fmt 청크 크기
+            1,   # PCM 포맷
+            num_channels,
+            sample_rate,
+            byte_rate,
+            block_align,
+            bits_per_sample,
+            b'data',
+            data_size
+        )
+        return header
+
     async def _chunk_audio(
         self,
         audio: np.ndarray,
@@ -353,7 +445,33 @@ class StreamingTTS:
         is_last: bool,
         emotion: str
     ) -> AsyncGenerator[AudioChunk, None]:
-        """오디오를 청크로 분할"""
+        """오디오를 청크로 분할 (WAV 형식)"""
+        
+        # chunk_size_ms가 0이면 전체 오디오를 하나의 청크로 전송 (찢어짐 방지)
+        if self.config.chunk_size_ms <= 0:
+            # 전체 오디오를 하나의 WAV로 변환
+            audio_int16 = (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
+            pcm_data = audio_int16.tobytes()
+            
+            wav_header = self._create_wav_header(
+                len(pcm_data),
+                self.config.sample_rate,
+                num_channels=1,
+                bits_per_sample=16
+            )
+            wav_data = wav_header + pcm_data
+            
+            yield AudioChunk(
+                data=wav_data,
+                sample_rate=self.config.sample_rate,
+                duration_ms=len(audio) / self.config.sample_rate * 1000,
+                text=text,
+                is_last=is_last,
+                emotion=emotion
+            )
+            return
+        
+        # 청크 분할 모드
         chunk_samples = int(
             self.config.sample_rate * self.config.chunk_size_ms / 1000
         )
@@ -366,9 +484,22 @@ class StreamingTTS:
             chunk_data = audio[offset:end]
 
             chunk_is_last = is_last and (end >= total_samples)
+            
+            # float32 (-1.0 ~ 1.0)을 int16 (-32768 ~ 32767)으로 변환
+            audio_int16 = (np.clip(chunk_data, -1.0, 1.0) * 32767).astype(np.int16)
+            pcm_data = audio_int16.tobytes()
+            
+            # WAV 헤더 추가
+            wav_header = self._create_wav_header(
+                len(pcm_data), 
+                self.config.sample_rate,
+                num_channels=1,
+                bits_per_sample=16
+            )
+            wav_data = wav_header + pcm_data
 
             yield AudioChunk(
-                data=chunk_data.astype(np.float32).tobytes(),
+                data=wav_data,
                 sample_rate=self.config.sample_rate,
                 duration_ms=len(chunk_data) / self.config.sample_rate * 1000,
                 text=text if offset == 0 else "",

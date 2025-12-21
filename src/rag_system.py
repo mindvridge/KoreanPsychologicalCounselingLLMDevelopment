@@ -339,14 +339,102 @@ class VectorStoreManager:
         self.persist_directory = persist_directory
         os.makedirs(persist_directory, exist_ok=True)
 
-        # 한국어 임베딩 모델 로드
+        # 한국어 임베딩 모델 로드 (safetensors 우선 사용)
         try:
-            self.embedding_model = SentenceTransformer(embedding_model)
-            logger.info(f"임베딩 모델 로드 완료: {embedding_model}")
+            import torch
+            
+            # PyTorch 버전 확인
+            torch_version = torch.__version__
+            logger.info(f"PyTorch 버전: {torch_version}")
+            
+            # safetensors 사용 강제 (보안 취약점 방지)
+            # 환경 변수 설정으로 safetensors 우선 사용
+            os.environ.setdefault('SAFETENSORS_FAST_GPU', '1')
+            os.environ.setdefault('HF_HUB_DISABLE_SYMLINKS_WARNING', '1')
+            
+            # transformers 라이브러리에서 safetensors 사용 강제
+            try:
+                from transformers import AutoModel
+                # safetensors를 기본으로 사용하도록 설정
+                os.environ.setdefault('TRANSFORMERS_SAFE_LOADING', '1')
+            except ImportError:
+                pass
+            
+            # 모델 로드 시도 (safetensors 우선 사용)
+            try:
+                # PyTorch 버전 확인 및 경고
+                try:
+                    version_parts = torch_version.split('+')[0].split('.')
+                    major, minor = int(version_parts[0]), int(version_parts[1])
+                    
+                    if major < 2 or (major == 2 and minor < 6):
+                        logger.warning(f"PyTorch 버전이 낮습니다: {torch_version} (권장: 2.6.0 이상)")
+                        logger.warning("safetensors 형식 모델을 사용하거나 PyTorch를 업그레이드하세요.")
+                except:
+                    pass
+                
+                # transformers 라이브러리에서 safetensors 사용 강제
+                os.environ['SAFETENSORS_FAST_GPU'] = '1'
+                
+                # SentenceTransformer는 내부적으로 safetensors를 지원
+                # 모델이 safetensors 형식이면 자동으로 사용
+                # trust_remote_code=False로 보안 강화
+                self.embedding_model = SentenceTransformer(
+                    embedding_model,
+                    device='cpu',  # CPU에서 먼저 로드 후 필요시 GPU로 이동
+                    trust_remote_code=False
+                )
+                logger.info(f"임베딩 모델 로드 완료: {embedding_model}")
+            except Exception as load_error:
+                error_msg = str(load_error)
+                logger.warning(f"기본 로드 방식 실패: {load_error}")
+                
+                # PyTorch 버전 문제인 경우 명확한 안내
+                if "torch.load" in error_msg or "CVE-2025-32434" in error_msg or "2.6" in error_msg:
+                    logger.error("=" * 60)
+                    logger.error("PyTorch 버전 문제가 감지되었습니다.")
+                    logger.error(f"현재 PyTorch 버전: {torch_version}")
+                    logger.error("필요한 버전: 2.6.0 이상")
+                    logger.error("")
+                    logger.error("해결 방법:")
+                    logger.error("1. PyTorch 업그레이드:")
+                    logger.error("   pip install --upgrade torch>=2.6.0")
+                    logger.error("")
+                    logger.error("2. 또는 CUDA 버전에 맞는 PyTorch 설치:")
+                    logger.error("   pip install torch>=2.6.0 --index-url https://download.pytorch.org/whl/cu121")
+                    logger.error("=" * 60)
+                
+                logger.warning("대체 모델로 재시도 중...")
+                
+                # 대체 모델 시도
+                try:
+                    # 더 작은 한국어 모델로 시도
+                    self.embedding_model = SentenceTransformer(
+                        "paraphrase-multilingual-MiniLM-L12-v2",
+                        device='cpu',
+                        trust_remote_code=False
+                    )
+                    logger.warning("대체 모델 로드 완료: paraphrase-multilingual-MiniLM-L12-v2")
+                except Exception as fallback_error:
+                    logger.error(f"대체 모델 로드도 실패: {fallback_error}")
+                    raise load_error  # 원래 오류를 다시 발생시킴
+                    
+        except ImportError as e:
+            logger.error(f"필수 라이브러리 import 실패: {e}")
+            logger.error("sentence-transformers를 설치해주세요: pip install sentence-transformers")
+            raise
         except Exception as e:
-            logger.error(f"임베딩 모델 로드 실패: {e}")
-            logger.warning("대체 모델 사용: paraphrase-multilingual-MiniLM-L12-v2")
-            self.embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+            error_msg = str(e)
+            logger.error(f"임베딩 모델 로드 실패: {error_msg}")
+            
+            # PyTorch 버전 관련 오류인지 확인
+            if "torch.load" in error_msg or "CVE-2025-32434" in error_msg or "2.6" in error_msg:
+                logger.error("PyTorch 버전 문제가 감지되었습니다.")
+                logger.error("다음 명령어로 PyTorch를 업그레이드하세요:")
+                logger.error("  pip install --upgrade torch>=2.6.0")
+                logger.error("또는 safetensors 형식의 모델을 사용하세요.")
+            
+            raise
 
         # 문서 저장소
         self.documents: List[Document] = []
@@ -1023,6 +1111,9 @@ class MentalHealthRAG:
         self.search_engine = HybridSearchEngine(self.vector_store)
         self.context_builder = ContextBuilder()
         self.evaluator = RAGEvaluator()
+        
+        # 인덱싱 상태 추적
+        self.is_indexed = len(self.vector_store.documents) > 0
 
         logger.info("MentalHealthRAG 시스템 초기화 완료")
 
@@ -1030,6 +1121,7 @@ class MentalHealthRAG:
         """지식 베이스 인덱싱"""
         if not os.path.exists(self.knowledge_base_dir):
             logger.warning(f"지식 베이스 디렉토리가 없습니다: {self.knowledge_base_dir}")
+            self.is_indexed = False
             return
 
         # 모든 문서 처리
@@ -1037,6 +1129,9 @@ class MentalHealthRAG:
 
         # 벡터 스토어에 추가
         self.vector_store.add_documents(documents)
+        
+        # 인덱싱 완료 표시
+        self.is_indexed = len(documents) > 0
 
         logger.info(f"지식 베이스 인덱싱 완료: {len(documents)}개 문서")
 

@@ -972,16 +972,14 @@ class LLMCrisisEvaluator:
         """
         CRISIS_RESPONSES = {
             RiskLevel.CRITICAL: {
-                "message": """⚠️ 긴급 상황입니다.
+                "message": """⚠️ **긴급 상황입니다**
 
-당신의 생명은 매우 소중합니다. 지금 느끼시는 고통이 얼마나 큰지 이해합니다.
+당신의 생명은 매우 소중합니다. 지금 즉시 전문가의 도움을 받으세요.
 
-하지만 혼자 감당하지 마시고, 지금 즉시 전문가의 도움을 받으시는 것이 중요합니다.
-
-🆘 자살예방상담전화: 1393 (24시간 무료)
-🆘 정신건강위기상담전화: 1577-0199 (24시간)
-🆘 카카오톡 상담: "카카오톡 플러스친구 상담톡109" 검색
-🆘 응급상황: 119 또는 가까운 응급실
+**즉시 연락처:**
+• 자살예방상담전화: **1393** (24시간)
+• 정신건강위기상담전화: **1577-0199** (24시간)
+• 응급상황: **119** 또는 가까운 응급실
 
 지금 이 순간이 힘들더라도, 도움을 받으시면 상황은 나아질 수 있습니다.""",
                 "resources": [
@@ -993,14 +991,12 @@ class LLMCrisisEvaluator:
                 "action": "IMMEDIATE_INTERVENTION"
             },
             RiskLevel.HIGH: {
-                "message": """지금 정말 힘든 상황이시군요. 이런 고통을 느끼시는 것이 얼마나 어려운지 이해합니다.
+                "message": """지금 정말 힘든 상황이시군요. 혼자서 감당하기 어려운 상황입니다. 전문가의 도움을 받으시는 것을 강력히 권유드립니다.
 
-혼자서 감당하기 어려운 상황입니다. 전문가의 도움을 받으시는 것을 강력히 권유드립니다.
-
-📞 정신건강위기상담전화: 1577-0199 (24시간)
-📞 자살예방상담전화: 1393 (24시간)
-📞 청소년전화: 1388 (24시간)
-🏥 가까운 정신건강복지센터 방문
+**상담 연락처:**
+• 정신건강위기상담전화: **1577-0199** (24시간)
+• 자살예방상담전화: **1393** (24시간)
+• 청소년전화: **1388** (24시간)
 
 당신은 혼자가 아닙니다. 도움을 요청하는 것은 용기있는 행동입니다.""",
                 "resources": [
@@ -1011,13 +1007,12 @@ class LLMCrisisEvaluator:
                 "action": "URGENT_PROFESSIONAL_REFERRAL"
             },
             RiskLevel.MEDIUM: {
-                "message": """많이 힘드신 것 같아요. 이런 어려움을 겪고 계시는 것이 느껴집니다.
+                "message": """많이 힘드신 것 같아요. 전문가와 상담하시면 더 큰 도움을 받으실 수 있습니다.
 
-전문가와 상담하시면 더 큰 도움을 받으실 수 있습니다.
-
-💬 정신건강복지센터: 지역 보건소 또는 1577-0199
-💬 온라인 상담: 한국상담심리학회, 한국임상심리학회
-💬 대학 상담센터 (학생의 경우)
+**상담 옵션:**
+• 정신건강복지센터: 지역 보건소 또는 **1577-0199**
+• 온라인 상담: 한국상담심리학회, 한국임상심리학회
+• 대학 상담센터 (학생의 경우)
 
 언제든 전문적인 도움을 받으시는 것을 고려해보세요.""",
                 "resources": [
@@ -1221,6 +1216,35 @@ class SafetySystem:
             f"User: {self.user_id} - Time: {crisis_log.timestamp}"
         )
 
+    def detect_crisis(
+        self,
+        text: str,
+        conversation_history: Optional[List[Dict]] = None
+    ) -> Dict[str, any]:
+        """
+        위기 감지 (check_safety의 별칭)
+        
+        Args:
+            text: 분석할 텍스트
+            conversation_history: 대화 이력
+            
+        Returns:
+            Dict: 위기 감지 결과
+        """
+        return self.check_safety(text, conversation_history=conversation_history)
+    
+    def get_intervention_message(self, risk_level: RiskLevel) -> Dict[str, any]:
+        """
+        위기 개입 메시지 가져오기
+        
+        Args:
+            risk_level: 위험 수준
+            
+        Returns:
+            Dict: 개입 정보 (message, resources, action)
+        """
+        return self.crisis_evaluator._generate_intervention(risk_level, {})
+    
     def get_crisis_history(self, limit: int = 10) -> List[Dict]:
         """
         위기 이력 조회

@@ -69,6 +69,24 @@ class VoiceApp {
 
             if (success) {
                 this.isInitialized = true;
+                
+                // Start visualizer with audio data source
+                if (this.visualizer && this.voiceChat) {
+                    this.visualizer.setDataSource(this.voiceChat);
+                    this.visualizer.start();
+                    console.log('Visualizer started with audio source');
+                }
+                
+                // Level meter는 handleAudioLevel 콜백을 통해 자동으로 업데이트됨
+                // LevelMeter 클래스는 update() 메서드를 사용하므로 setAnalyser가 필요 없음
+                // 만약 다른 타입의 levelMeter를 사용한다면 setAnalyser 메서드가 있을 수 있음
+                if (this.levelMeter && this.voiceChat && typeof this.levelMeter.setAnalyser === 'function') {
+                    this.levelMeter.setAnalyser(this.voiceChat.analyserNode);
+                } else if (this.levelMeter) {
+                    // LevelMeter는 handleAudioLevel을 통해 자동으로 업데이트됨
+                    console.log('Level meter ready (will be updated via handleAudioLevel)');
+                }
+                
                 this.enableRecordButton();
                 this.updateStatus('ready', '음성 채팅 준비 완료');
             }
@@ -316,6 +334,10 @@ class VoiceApp {
             if (this.recordingIndicator) {
                 this.recordingIndicator.start();
             }
+            // Ensure visualizer is running
+            if (this.visualizer && !this.visualizer.isRunning) {
+                this.visualizer.start();
+            }
         }
     }
 
@@ -421,8 +443,30 @@ class VoiceApp {
 
     handleError(data) {
         console.error('Voice error:', data);
-        UI.showToast(data.message || '음성 처리 중 오류가 발생했습니다');
-        this.updateStatus('error', data.message);
+        
+        // 에러 메시지 추출
+        let errorMessage = '음성 처리 중 오류가 발생했습니다';
+        if (data) {
+            if (typeof data === 'string') {
+                errorMessage = data;
+            } else if (data.message) {
+                errorMessage = data.message;
+            } else if (data.error) {
+                errorMessage = data.error;
+            } else if (data.type) {
+                errorMessage = `오류 타입: ${data.type}`;
+            }
+        }
+        
+        console.error('Error details:', {
+            data: data,
+            type: data?.type,
+            message: data?.message,
+            error: data?.error
+        });
+        
+        UI.showToast(errorMessage);
+        this.updateStatus('error', errorMessage);
     }
 
     // =========================================================================

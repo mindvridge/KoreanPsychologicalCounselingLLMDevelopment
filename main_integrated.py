@@ -18,7 +18,7 @@ load_dotenv()  # 프로젝트 루트의 .env 파일 로드
 
 # Import all system components
 from src.main import KoreanMentalHealthLLM
-from src.safety_system_v2 import LLMCrisisEvaluator, RiskLevel
+from src.safety_system_v2 import LLMCrisisEvaluator, RiskLevel, SafetySystem
 from src.emotion_analyzer_v2 import KoreanEmotionAnalyzer
 from src.assessments import AssessmentManager, PHQ9Assessment, GAD7Assessment, K10Assessment
 from src.rag_system import MentalHealthRAG
@@ -65,6 +65,7 @@ class IntegratedMentalHealthSystem:
         # Initialize components
         self.llm: Optional[KoreanMentalHealthLLM] = None
         self.crisis_detector: Optional[LLMCrisisEvaluator] = None
+        self.safety_system: Optional[SafetySystem] = None
         self.emotion_analyzer: Optional[KoreanEmotionAnalyzer] = None
         self.assessment_manager: Optional[AssessmentManager] = None
         self.rag_system: Optional[MentalHealthRAG] = None
@@ -144,6 +145,7 @@ class IntegratedMentalHealthSystem:
     def initialize_all_components(self) -> bool:
         """
         Initialize all system components
+        LLM을 먼저 초기화하여 빠른 응답 가능하도록 함
 
         Returns:
             True if successful, False otherwise
@@ -152,85 +154,11 @@ class IntegratedMentalHealthSystem:
 
         success = True
 
-        # 1. Initialize monitoring (first, to track initialization)
+        # ========================================================================
+        # 우선순위 1: LLM 초기화 (가장 중요, 먼저 초기화)
+        # ========================================================================
         try:
-            logger.info("1/7 Initializing monitoring system...")
-            self.monitor = init_monitor(
-                retention_days=self.config.get("monitoring", {}).get("retention_days", 30)
-            )
-            logger.info("✓ Monitoring system initialized")
-        except Exception as e:
-            logger.error(f"✗ Monitoring initialization failed: {e}")
-            self.initialization_errors.append(("monitoring", str(e)))
-            success = False
-
-        # 2. Initialize logging
-        try:
-            logger.info("2/7 Initializing conversation logging...")
-            self.logger = init_conversation_logger(
-                log_dir=Path(self.config.get("logging", {}).get("log_dir", "./logs")),
-                retention_days=self.config.get("logging", {}).get("retention_days", 90),
-                enable_encryption=self.config.get("logging", {}).get("enable_encryption", True)
-            )
-            logger.info("✓ Conversation logging initialized")
-        except Exception as e:
-            logger.error(f"✗ Logging initialization failed: {e}")
-            self.initialization_errors.append(("logging", str(e)))
-            success = False
-
-        # 3. Initialize RAG system
-        try:
-            logger.info("3/7 Initializing RAG system...")
-            rag_config = self.config.get("rag", {})
-            self.rag_system = MentalHealthRAG(
-                knowledge_base_dir=rag_config.get("knowledge_base_dir", "./knowledge_base"),
-                chunk_size=rag_config.get("chunk_size", 500),
-                chunk_overlap=rag_config.get("chunk_overlap", 50),
-                embedding_model=rag_config.get("embedding_model", "jhgan/ko-sroberta-multitask")
-            )
-            logger.info("   Indexing knowledge base...")
-            self.rag_system.index_documents()
-            logger.info(f"✓ RAG system initialized with {len(self.rag_system.doc_processor.documents)} documents")
-        except Exception as e:
-            logger.error(f"✗ RAG initialization failed: {e}")
-            self.initialization_errors.append(("rag", str(e)))
-            # RAG is optional, continue without it
-            self.rag_system = None
-
-        # 4. Initialize emotion analyzer
-        try:
-            logger.info("4/7 Initializing emotion analyzer...")
-            self.emotion_analyzer = KoreanEmotionAnalyzer()
-            logger.info("✓ Emotion analyzer initialized")
-        except Exception as e:
-            logger.error(f"✗ Emotion analyzer initialization failed: {e}")
-            self.initialization_errors.append(("emotion_analyzer", str(e)))
-            success = False
-
-        # 5. Initialize crisis detector
-        try:
-            logger.info("5/7 Initializing crisis detection system...")
-            self.crisis_detector = LLMCrisisEvaluator()
-            logger.info("✓ Crisis detection system initialized")
-        except Exception as e:
-            logger.error(f"✗ Crisis detector initialization failed: {e}")
-            self.initialization_errors.append(("crisis_detector", str(e)))
-            success = False
-
-        # 6. Initialize assessment manager
-        try:
-            logger.info("6/7 Initializing assessment manager...")
-            self.assessment_manager = AssessmentManager()
-            logger.info("✓ Assessment manager initialized")
-        except Exception as e:
-            logger.error(f"✗ Assessment manager initialization failed: {e}")
-            self.initialization_errors.append(("assessment_manager", str(e)))
-            # Assessments are optional
-            self.assessment_manager = None
-
-        # 7. Initialize LLM (last, most memory-intensive)
-        try:
-            logger.info("7/7 Initializing LLM...")
+            logger.info("1/7 Initializing LLM (Priority 1)...")
             model_config = self.config.get("model", {})
             provider = model_config.get("provider", "local")
 
@@ -240,14 +168,12 @@ class IntegratedMentalHealthSystem:
                 from src.openai_adapter import OpenAICounselor, OpenAIConfig
                 
                 # .env 파일을 다시 로드하여 환경 변수 확인
-                # (Uvicorn reload 모드에서 환경 변수가 손실될 수 있음)
                 from dotenv import load_dotenv
                 env_path = Path(__file__).parent / ".env"
                 if env_path.exists():
                     load_dotenv(env_path, override=True)
                     logger.info(f"   Loaded .env file from {env_path}")
                 else:
-                    # 프로젝트 루트에서 찾기
                     load_dotenv(override=True)
                 
                 # API 키 확인
@@ -257,13 +183,14 @@ class IntegratedMentalHealthSystem:
                 
                 openai_config = model_config.get("openai", {})
                 config = OpenAIConfig(
-                    api_key=api_key,  # 명시적으로 API 키 전달
-                    model=model_config.get("name", "gpt-4o-mini"),
+                    api_key=api_key,
+                    model=model_config.get("name", "gpt-5.2"),
                     temperature=openai_config.get("temperature", 0.7),
                     max_tokens=openai_config.get("max_tokens", 500),
                     top_p=openai_config.get("top_p", 0.9),
                     frequency_penalty=openai_config.get("frequency_penalty", 0.0),
                     presence_penalty=openai_config.get("presence_penalty", 0.0),
+                    reasoning_effort=openai_config.get("reasoning_effort", "none"),  # GPT-5.2용
                     track_cost=openai_config.get("track_cost", True)
                 )
                 self.llm = OpenAICounselor(config)
@@ -279,7 +206,6 @@ class IntegratedMentalHealthSystem:
             else:
                 # 로컬 LLM 사용 (기본값)
                 logger.info("   Using local LLM provider")
-                # Check GPU availability
                 if torch.cuda.is_available():
                     logger.info(f"   GPU detected: {torch.cuda.get_device_name(0)}")
                     logger.info(f"   GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
@@ -293,14 +219,128 @@ class IntegratedMentalHealthSystem:
                 logger.info("✓ Local LLM initialized successfully")
                 
         except Exception as e:
-            logger.error(f"✗ LLM initialization failed: {e}")
+            logger.error(f"✗ LLM initialization failed: {e}", exc_info=True)
+            # 콘솔에 상세 오류 출력
+            print("="*70)
+            print("❌ LLM 초기화 실패!")
+            print(f"오류 타입: {type(e).__name__}")
+            print(f"오류 메시지: {str(e)}")
+            print("\n상세 오류:")
+            import traceback
+            traceback.print_exc()
+            print("="*70)
             self.initialization_errors.append(("llm", str(e)))
-            # LLM 초기화 실패해도 서버는 실행 가능 (degraded mode)
             self.llm = None
             logger.warning("API will run in degraded mode without LLM")
-                
-        # 초기화 실패해도 서버는 실행 가능 (degraded mode)
-        # LLM이 없어도 다른 기능들은 작동 가능
+            success = False
+
+        # ========================================================================
+        # 우선순위 2: 필수 컴포넌트 (감정 분석, 위기 감지)
+        # ========================================================================
+        
+        # 2. Initialize emotion analyzer
+        try:
+            logger.info("2/7 Initializing emotion analyzer...")
+            # 하이브리드 감정 분석: LLM 어댑터 전달
+            self.emotion_analyzer = KoreanEmotionAnalyzer(llm_adapter=self.llm if hasattr(self, 'llm') and self.llm else None)
+            logger.info("✓ Emotion analyzer initialized")
+        except Exception as e:
+            logger.error(f"✗ Emotion analyzer initialization failed: {e}")
+            self.initialization_errors.append(("emotion_analyzer", str(e)))
+            # 감정 분석 실패해도 계속 진행
+            self.emotion_analyzer = None
+
+        # 3. Initialize crisis detector and safety system
+        try:
+            logger.info("3/7 Initializing crisis detection system...")
+            # SafetySystem 초기화 (4개 레이어 통합)
+            self.safety_system = SafetySystem()
+            # LLMCrisisEvaluator도 유지 (호환성)
+            self.crisis_detector = LLMCrisisEvaluator()
+            logger.info("✓ Crisis detection system initialized")
+        except Exception as e:
+            logger.error(f"✗ Crisis detector initialization failed: {e}")
+            self.initialization_errors.append(("crisis_detector", str(e)))
+            # 위기 감지 실패해도 계속 진행
+            self.crisis_detector = None
+            self.safety_system = None
+
+        # ========================================================================
+        # 우선순위 3: 선택적 컴포넌트 (나중에 초기화 가능)
+        # ========================================================================
+        
+        # 4. Initialize assessment manager (선택적)
+        try:
+            logger.info("4/7 Initializing assessment manager...")
+            self.assessment_manager = AssessmentManager()
+            logger.info("✓ Assessment manager initialized")
+        except Exception as e:
+            logger.warning(f"Assessment manager initialization failed: {e} (optional)")
+            self.initialization_errors.append(("assessment_manager", str(e)))
+            self.assessment_manager = None
+
+        # 5. Initialize RAG system (선택적, 느릴 수 있음)
+        try:
+            logger.info("5/7 Initializing RAG system...")
+            rag_config = self.config.get("rag", {})
+            # MentalHealthRAG는 chunk_size를 직접 받지 않으므로 DocumentProcessor에 전달
+            # DocumentProcessor를 먼저 생성하고 설정한 후 MentalHealthRAG에 전달
+            from src.rag_system import DocumentProcessor, VectorStoreManager
+            chunk_size = rag_config.get("chunk_size", 500)
+            chunk_overlap = rag_config.get("chunk_overlap", 50)
+            
+            # DocumentProcessor를 설정된 파라미터로 생성
+            doc_processor = DocumentProcessor(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap
+            )
+            
+            # MentalHealthRAG 초기화
+            self.rag_system = MentalHealthRAG(
+                knowledge_base_dir=rag_config.get("knowledge_base_dir", "./knowledge_base"),
+                persist_directory=rag_config.get("persist_directory", "./mental_health_vectors")
+            )
+            
+            # 생성된 DocumentProcessor를 설정된 것으로 교체
+            self.rag_system.doc_processor = doc_processor
+            logger.info(f"DocumentProcessor configured: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}")
+            
+            logger.info("   Indexing knowledge base...")
+            self.rag_system.index_knowledge_base()
+            logger.info("✓ RAG system initialized")
+        except Exception as e:
+            logger.warning(f"RAG initialization failed: {e} (optional, will continue without RAG)")
+            self.initialization_errors.append(("rag", str(e)))
+            self.rag_system = None
+
+        # 6. Initialize monitoring (선택적)
+        try:
+            logger.info("6/7 Initializing monitoring system...")
+            self.monitor = init_monitor(
+                retention_days=self.config.get("monitoring", {}).get("retention_days", 30)
+            )
+            logger.info("✓ Monitoring system initialized")
+        except Exception as e:
+            logger.warning(f"Monitoring initialization failed: {e} (optional)")
+            self.initialization_errors.append(("monitoring", str(e)))
+            self.monitor = None
+
+        # 7. Initialize logging (선택적)
+        try:
+            logger.info("7/7 Initializing conversation logging...")
+            self.logger = init_conversation_logger(
+                log_dir=Path(self.config.get("logging", {}).get("log_dir", "./logs")),
+                retention_days=self.config.get("logging", {}).get("retention_days", 90),
+                enable_encryption=self.config.get("logging", {}).get("enable_encryption", True)
+            )
+            logger.info("✓ Conversation logging initialized")
+        except Exception as e:
+            logger.warning(f"Logging initialization failed: {e} (optional)")
+            self.initialization_errors.append(("logging", str(e)))
+            self.logger = None
+
+        # 초기화 완료 표시
+        # LLM이 초기화되었으면 시스템은 사용 가능한 상태
         self.is_initialized = True  # 항상 True로 설정하여 서버 실행 허용
 
         if success:
@@ -317,13 +357,25 @@ class IntegratedMentalHealthSystem:
 
         return True  # 항상 True 반환하여 서버 실행 허용
 
-    def validate_system(self) -> Dict[str, bool]:
+    def validate_system(self, use_cache: bool = True) -> Dict[str, bool]:
         """
         Validate all system components
+
+        Args:
+            use_cache: 캐시된 검증 결과 사용 여부 (기본값: True)
+                      False인 경우 항상 새로 검증
 
         Returns:
             Dictionary of component validation results
         """
+        # 캐시된 검증 결과가 있고 use_cache가 True이면 재사용
+        if use_cache and hasattr(self, '_validation_cache') and self._validation_cache is not None:
+            cache_age = (datetime.now() - self._validation_cache['timestamp']).total_seconds()
+            # 캐시가 30초 이내면 재사용
+            if cache_age < 30:
+                logger.debug(f"Using cached validation results (age: {cache_age:.1f}s)")
+                return self._validation_cache['results']
+        
         logger.info("Validating system...")
 
         results = {
@@ -391,11 +443,12 @@ class IntegratedMentalHealthSystem:
         # Validate RAG system
         if self.rag_system and self.rag_system.is_indexed:
             try:
-                test_results = self.rag_system.search("우울증", k=1)
+                test_results = self.rag_system.retrieve("우울증", k=1)
                 results["rag_system"] = len(test_results) > 0
                 logger.info(f"✓ RAG system validation: {'PASS' if results['rag_system'] else 'FAIL'}")
             except Exception as e:
                 logger.error(f"✗ RAG system validation failed: {e}")
+                results["rag_system"] = False
 
         # Validate monitoring
         if self.monitor:
@@ -406,6 +459,12 @@ class IntegratedMentalHealthSystem:
         if self.logger:
             results["logging"] = True
             logger.info("✓ Logging validation: PASS")
+
+        # 검증 결과 캐싱 (30초 동안 유효)
+        self._validation_cache = {
+            'results': results,
+            'timestamp': datetime.now()
+        }
 
         return results
 
@@ -441,31 +500,53 @@ class IntegratedMentalHealthSystem:
             }
 
         try:
-            # 1. Emotion analysis
+            # 1. Emotion analysis (대화 히스토리 포함)
             emotion_result = None
             if self.emotion_analyzer:
                 try:
-                    emotion_result = self.emotion_analyzer.analyze(user_message)
+                    # 대화 히스토리를 감정 분석에 전달 (문맥 분석 향상)
+                    history = conversation_history or []
+                    emotion_result = self.emotion_analyzer.analyze(
+                        user_message,
+                        context=None,
+                        conversation_history=history
+                    )
                 except Exception as e:
                     logger.warning(f"Emotion analysis failed: {e}")
                     emotion_result = None
 
-            # 2. Crisis detection
+            # 2. Crisis detection (SafetySystem 사용)
             crisis_result = None
             crisis_detected = False
             crisis_level = 0
+            intervention_message = None
 
-            if self.crisis_detector:
+            if self.safety_system:
                 try:
                     history = conversation_history or []
-                    # LLMCrisisEvaluator는 evaluate 메서드를 사용하지만, 
-                    # SafetySystem을 통해 사용하는 것이 더 적절합니다.
-                    # 일단 간단한 위기 감지를 위해 emotion_result를 사용합니다.
-                    # 실제로는 SafetySystem을 초기화해야 하지만, 
-                    # 지금은 기본 응답만 반환하도록 합니다.
-                    crisis_result = None
-                    crisis_detected = False
-                    crisis_level = 0
+                    # SafetySystem을 사용한 위기 감지
+                    safety_result = self.safety_system.detect_crisis(
+                        user_message,
+                        conversation_history=history
+                    )
+                    
+                    # 위기 수준 확인
+                    risk_level = safety_result.get("risk_level", RiskLevel.NONE)
+                    crisis_detected = safety_result.get("requires_intervention", False)
+                    crisis_level = self._risk_level_to_int(risk_level)
+                    
+                    if crisis_detected:
+                        # 위기 개입 메시지 가져오기
+                        intervention = self.safety_system.get_intervention_message(risk_level)
+                        intervention_message = intervention.get("message", "")
+                        crisis_result = {
+                            "risk_level": risk_level.value,
+                            "severity": crisis_level,
+                            "intervention_message": intervention_message,
+                            "resources": intervention.get("resources", []),
+                            "action": intervention.get("action", "")
+                        }
+                        logger.warning(f"⚠️ Crisis detected: {risk_level.value} (level {crisis_level})")
                 except Exception as e:
                     logger.warning(f"Crisis detection failed: {e}")
                     crisis_result = None
@@ -482,9 +563,10 @@ class IntegratedMentalHealthSystem:
                     logger.warning(f"RAG retrieval failed: {e}")
 
             # 4. Generate response
-            if crisis_detected and crisis_level >= 4 and crisis_result:
-                # High crisis: Use predefined emergency response
-                response = self._get_crisis_response(crisis_result)
+            if crisis_detected and intervention_message:
+                # 위기 상황: 위기 개입 메시지만 반환 (LLM 응답 없음)
+                response = intervention_message
+                logger.info("Using crisis intervention message (LLM response skipped)")
             else:
                 # Normal: Generate with LLM
                 if not self.llm:
@@ -612,7 +694,8 @@ class IntegratedMentalHealthSystem:
                 "metadata": {
                     "session_id": session_id,
                     "timestamp": datetime.now().isoformat(),
-                    "rag_used": bool(rag_context)
+                    "rag_used": bool(rag_context),
+                    "therapy_technique": self._detect_therapy_technique(response) if hasattr(self, '_detect_therapy_technique') else None
                 }
             }
 
@@ -773,8 +856,8 @@ def main():
         logger.error("Failed to initialize system")
         sys.exit(1)
 
-    # Validate
-    validation_results = system.validate_system()
+    # Validate (초기화 시에는 항상 새로 검증)
+    validation_results = system.validate_system(use_cache=False)
 
     all_valid = all(validation_results.values())
     if not all_valid:

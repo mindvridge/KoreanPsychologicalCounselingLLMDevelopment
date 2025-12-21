@@ -15,9 +15,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()  # 프로젝트 루트의 .env 파일 로드
 
+# Starlette Config가 .env 파일을 읽지 않도록 설정 (인코딩 문제 방지)
+# python-dotenv로 이미 로드했으므로 Starlette가 다시 읽을 필요 없음
+os.environ.setdefault("STARLETTE_ENV_FILE", "")
+
 from fastapi import FastAPI, HTTPException, Depends, Header, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, validator
@@ -37,6 +41,36 @@ logger = logging.getLogger(__name__)
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+# ============================================================================
+# JSON 직렬화 헬퍼 함수
+# ============================================================================
+
+def convert_to_json_serializable(obj):
+    """
+    numpy 타입 및 기타 JSON 직렬화 불가능한 타입을 Python 기본 타입으로 변환
+    
+    Args:
+        obj: 변환할 객체
+        
+    Returns:
+        JSON 직렬화 가능한 객체
+    """
+    import numpy as np
+    
+    if isinstance(obj, (np.integer, np.floating)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_to_json_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_to_json_serializable(item) for item in obj]
+    elif hasattr(obj, '__dict__'):
+        return convert_to_json_serializable(obj.__dict__)
+    else:
+        return obj
 
 # 지연 임포트 (서버 시작 후 필요할 때 로드)
 IntegratedMentalHealthSystem = None
@@ -84,7 +118,39 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize rate limiter
-limiter = Limiter(key_func=get_remote_address)
+# Starlette Config가 .env 파일을 읽을 때 인코딩 문제가 발생하므로
+# Starlette Config의 _read_file 메서드를 패치하여 UTF-8 사용
+try:
+    from starlette.config import Config
+    original_read_file = Config._read_file
+    
+    def patched_read_file(self, env_file):
+        """UTF-8 인코딩을 사용하도록 패치된 _read_file 메서드"""
+        if env_file is None or not Path(env_file).exists():
+            return {}
+        try:
+            with open(env_file, 'r', encoding='utf-8') as input_file:
+                return dict(
+                    tuple(line.strip().split("=", 1))
+                    for line in input_file
+                    if line.strip() and not line.strip().startswith("#") and "=" in line
+                )
+        except Exception:
+            return {}
+    
+    # 패치 적용
+    Config._read_file = patched_read_file
+    
+    limiter = Limiter(
+        key_func=get_remote_address, 
+        default_limits=["1000/hour"]
+    )
+    logger.info("Rate limiter initialized successfully")
+except Exception as e:
+    logger.warning(f"Failed to initialize rate limiter: {e}")
+    logger.warning("Continuing without rate limiting")
+    # Rate limiting 없이 진행
+    limiter = None
 
 # Create FastAPI app
 app = FastAPI(
@@ -95,9 +161,12 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Add rate limit exception handler
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Add rate limit exception handler (if limiter is available)
+if limiter is not None:
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+else:
+    logger.warning("Rate limiting disabled (limiter not initialized)")
 
 # CORS Configuration
 app.add_middleware(
@@ -137,6 +206,7 @@ class ChatRequest(BaseModel):
         description="Conversation history in format [{'role': 'user/assistant', 'content': '...'}]"
     )
     consent: bool = Field(default=True, description="Data storage consent for personalization")
+    image_base64: Optional[str] = Field(None, description="Base64-encoded image (webcam capture) for emotion analysis")
 
     @validator('message')
     def message_not_empty(cls, v):
@@ -148,13 +218,16 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     """Chat message response"""
     session_id: str = Field(..., description="Session ID")
+    user_message: Optional[str] = Field(None, description="User message (echo)")
     response: str = Field(..., description="AI assistant response")
-    crisis_detected: bool = Field(..., description="Whether crisis was detected")
-    crisis_level: int = Field(..., description="Crisis level (0=none, 1-5=severity)")
+    crisis_detected: bool = Field(default=False, description="Whether crisis was detected")
+    crisis_level: int = Field(default=0, description="Crisis level (0=none, 1-5=severity)")
     emotions: Optional[Dict[str, Any]] = Field(None, description="Detected emotions")
     suggested_assessment: Optional[str] = Field(None, description="Suggested psychological assessment")
-    response_time: float = Field(..., description="Response time in seconds")
-    metadata: Dict[str, Any] = Field(..., description="Additional metadata")
+    response_time: float = Field(default=0.0, description="Response time in seconds")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
+    audio_base64: Optional[str] = Field(None, description="TTS audio in base64 format (WAV)")
+    audio_duration: Optional[float] = Field(None, description="Audio duration in seconds")
 
 
 class SessionResponse(BaseModel):
@@ -206,6 +279,7 @@ class HealthResponse(BaseModel):
     timestamp: str
     components: Dict[str, bool]
     uptime_seconds: float
+    initialization_errors: List[Dict[str, str]] = Field(default_factory=list, description="초기화 오류 목록")
 
 
 class ErrorResponse(BaseModel):
@@ -421,6 +495,16 @@ async def startup_event():
     async def initialize_system():
         global mental_health_system, personalization_manager, persona_manager
         try:
+            # IntegratedMentalHealthSystem이 임포트되었는지 확인
+            if IntegratedMentalHealthSystem is None:
+                error_msg = (
+                    "IntegratedMentalHealthSystem 모듈을 임포트할 수 없습니다. "
+                    "실행파일 빌드 시 main_integrated 모듈이 포함되지 않았을 수 있습니다. "
+                    "build_exe.py의 hiddenimports에 'main_integrated'를 추가하세요."
+                )
+                logger.error(error_msg)
+                raise ImportError(error_msg)
+            
             # Initialize integrated system
             # .env 파일에서 CONFIG_PATH를 먼저 확인하고, 없으면 기본값 사용
             config_path = os.getenv("CONFIG_PATH")
@@ -428,54 +512,105 @@ async def startup_event():
                 # .env 파일에서 직접 읽기 시도
                 from dotenv import load_dotenv
                 load_dotenv()
-                config_path = os.getenv("CONFIG_PATH", "configs/config.openai-test.yaml")
+                config_path = os.getenv("CONFIG_PATH", "configs/config.yaml")
             logger.info(f"Initializing system with config: {config_path}")
             mental_health_system = IntegratedMentalHealthSystem(config_path=config_path)
 
-            # Initialize all components
+            # Initialize all components (LLM 우선 초기화)
+            logger.info("Starting component initialization...")
             success = mental_health_system.initialize_all_components()
 
-            if not success:
-                logger.error("Failed to initialize some components")
-                logger.warning("API will run in degraded mode")
-            else:
-                logger.info("All components initialized successfully")
-            
-            # LLM 초기화 상태 확인
+            # LLM 초기화 상태 확인 (가장 중요)
             if mental_health_system.llm:
                 logger.info(f"✅ LLM initialized: {type(mental_health_system.llm).__name__}")
+                logger.info("✅ 시스템이 사용 가능한 상태입니다 (LLM 준비 완료)")
+                print("="*70)
+                print("✅ LLM 초기화 성공!")
+                print(f"모델: {type(mental_health_system.llm).__name__}")
+                print("="*70)
             else:
                 logger.error("❌ LLM initialization failed!")
+                print("="*70)
+                print("❌ LLM 초기화 실패!")
                 if mental_health_system.initialization_errors:
                     for component, error in mental_health_system.initialization_errors:
                         if component == "llm":
                             logger.error(f"LLM initialization error: {error}")
+                            logger.error("시스템이 정상 작동하지 않을 수 있습니다.")
+                            print(f"오류: {error}")
+                            print("\n상세 오류 정보:")
+                            import traceback
+                            traceback.print_exc()
+                else:
+                    print("초기화 오류 정보가 없습니다.")
+                print("="*70)
+            
+            # 다른 컴포넌트 초기화 상태
+            if not success:
+                logger.warning("⚠️ Some optional components failed to initialize")
+                logger.warning("API will run in degraded mode (LLM만 사용)")
+            else:
+                logger.info("✅ All components initialized successfully")
 
             # Initialize personalization manager (long-term memory)
             if os.getenv("ENABLE_LONG_TERM_MEMORY", "true").lower() == "true":
                 try:
-                    personalization_manager = PersonalizationManager()
-                    logger.info("✓ PersonalizationManager initialized (long-term memory enabled)")
+                    if PersonalizationManager is not None:
+                        personalization_manager = PersonalizationManager()
+                        logger.info("✓ PersonalizationManager initialized (long-term memory enabled)")
+                    else:
+                        logger.warning("PersonalizationManager is not available (module import failed)")
                 except Exception as e:
-                    logger.error(f"Failed to initialize PersonalizationManager: {e}")
+                    logger.error(f"Failed to initialize PersonalizationManager: {e}", exc_info=True)
                     logger.warning("Long-term memory features will be disabled")
             else:
                 logger.info("Long-term memory disabled (ENABLE_LONG_TERM_MEMORY=false)")
 
             # Initialize persona manager (counselor personas)
             try:
-                persona_manager = PersonaManager()
-                logger.info(f"✓ PersonaManager initialized ({len(persona_manager.personas)} personas loaded)")
+                if PersonaManager is not None:
+                    persona_manager = PersonaManager()
+                    logger.info(f"✓ PersonaManager initialized ({len(persona_manager.personas)} personas loaded)")
+                else:
+                    logger.warning("PersonaManager is not available (module import failed)")
             except Exception as e:
-                logger.error(f"Failed to initialize PersonaManager: {e}")
+                logger.error(f"Failed to initialize PersonaManager: {e}", exc_info=True)
                 logger.warning("Persona features will be disabled")
 
             logger.info("API is ready to accept requests")
             logger.info("="*70)
 
+        except ImportError as e:
+            error_msg = str(e)
+            logger.error(f"Failed to import required modules: {error_msg}", exc_info=True)
+            logger.error("API will start but may not function correctly")
+            # 콘솔에 오류 출력
+            print("="*70)
+            print("❌ 모듈 임포트 실패!")
+            print(f"오류: {error_msg}")
+            print("\n해결 방법:")
+            print("1. 실행파일을 다시 빌드하세요: build_exe.bat")
+            print("2. 또는 Python 환경에서 직접 실행하세요: python start_all.py")
+            print("3. 필요한 모듈이 모두 설치되어 있는지 확인하세요")
+            import traceback
+            print("\n상세 오류:")
+            traceback.print_exc()
+            print("="*70)
+            # 서버는 계속 실행되도록 함
+            mental_health_system = None
+            personalization_manager = None
+            persona_manager = None
         except Exception as e:
             logger.error(f"Failed to initialize system: {e}", exc_info=True)
             logger.error("API will start but may not function correctly")
+            # 콘솔에 오류 출력
+            print("="*70)
+            print("❌ 시스템 초기화 실패!")
+            print(f"오류: {e}")
+            import traceback
+            print("\n상세 오류:")
+            traceback.print_exc()
+            print("="*70)
             # 서버는 계속 실행되도록 함
             mental_health_system = None
             personalization_manager = None
@@ -524,6 +659,13 @@ async def root():
         }
 
 
+@app.get("/favicon.ico", tags=["Root"])
+async def favicon():
+    """Favicon endpoint - Return 204 No Content to prevent 404 errors"""
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
 @app.get("/api", tags=["Root"])
 @app.get("/api/v1", tags=["Root"])
 async def api_info():
@@ -565,11 +707,12 @@ async def health_check():
                 "monitoring": False,
                 "logging": False
             },
-            uptime_seconds=0
+            uptime_seconds=0,
+            initialization_errors=[]  # mental_health_system이 None이므로 오류 정보 없음
         )
 
-    # Validate components
-    validation_results = mental_health_system.validate_system()
+    # Validate components (캐시 사용하여 중복 검증 방지)
+    validation_results = mental_health_system.validate_system(use_cache=True)
 
     # Calculate uptime
     uptime = (datetime.now() - mental_health_system.stats["uptime_start"]).total_seconds()
@@ -578,11 +721,20 @@ async def health_check():
     all_critical_ok = validation_results.get("llm", False) and validation_results.get("crisis_detector", False)
     overall_status = "healthy" if all_critical_ok else "degraded"
 
+    # 초기화 오류 정보 가져오기
+    init_errors = []
+    if hasattr(mental_health_system, 'initialization_errors') and mental_health_system.initialization_errors:
+        init_errors = [
+            {"component": component, "error": str(error)}
+            for component, error in mental_health_system.initialization_errors
+        ]
+    
     return HealthResponse(
         status=overall_status,
         timestamp=datetime.now().isoformat(),
         components=validation_results,
-        uptime_seconds=uptime
+        uptime_seconds=uptime,
+        initialization_errors=init_errors
     )
 
 
@@ -607,34 +759,65 @@ async def chat(
     start_time = datetime.now()
 
     # Check if system is initialized
+    # LLM만 있으면 기본 응답 가능 (다른 컴포넌트는 선택적)
     if not mental_health_system:
-        logger.warning("Chat request received but mental_health_system is None")
-        api_requests.labels(method="POST", endpoint="/chat", status="503").inc()
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="System is still initializing. Please wait a moment and try again."
+        logger.warning("Chat request received but mental_health_system is None - using fallback response")
+        # 기본 응답 반환
+        return ChatResponse(
+            session_id=chat_request.session_id or get_or_create_session(),
+            user_message=chat_request.message,
+            response="안녕하세요. 시스템이 아직 초기화 중입니다. 잠시만 기다려주시면 정상적으로 응답드리겠습니다.",
+            crisis_detected=False,
+            crisis_level=0,
+            emotions=None,
+            suggested_assessment=None,
+            response_time=0.1,
+            metadata={
+                "status": "initializing",
+                "message": "System is still initializing"
+            }
         )
     
-    if not hasattr(mental_health_system, 'is_initialized'):
-        logger.error("mental_health_system missing is_initialized attribute")
-        api_requests.labels(method="POST", endpoint="/chat", status="503").inc()
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="System initialization incomplete. Please try again later."
-        )
-    
-    if not mental_health_system.is_initialized:
-        logger.warning(f"Chat request received but system not initialized. is_initialized={mental_health_system.is_initialized}")
-        api_requests.labels(method="POST", endpoint="/chat", status="503").inc()
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="System is still initializing. Please wait a moment and try again."
-        )
-    
-    # Check if LLM is actually available (critical component)
-    # LLM이 없어도 process_message가 기본 응답을 반환하므로 허용
+    # LLM이 초기화되었는지 확인 (가장 중요)
+    # LLM이 없으면 초기화가 완료될 때까지 기다리거나 기본 응답 반환
     if not hasattr(mental_health_system, 'llm') or mental_health_system.llm is None:
-        logger.warning("Chat request received but LLM is not initialized. Will use fallback response.")
+        logger.warning("Chat request received but LLM is not initialized - checking initialization status...")
+        
+        # 초기화 오류 확인
+        if hasattr(mental_health_system, 'initialization_errors'):
+            for component, error in mental_health_system.initialization_errors:
+                if component == "llm":
+                    logger.error(f"LLM initialization error: {error}")
+                    return ChatResponse(
+                        session_id=chat_request.session_id or get_or_create_session(),
+                        user_message=chat_request.message,
+                        response=f"죄송합니다. AI 모델 초기화 중 오류가 발생했습니다: {str(error)[:100]}. 잠시 후 다시 시도해주세요.",
+                        crisis_detected=False,
+                        crisis_level=0,
+                        emotions=None,
+                        suggested_assessment=None,
+                        response_time=0.1,
+                        metadata={
+                            "status": "error",
+                            "message": f"LLM initialization failed: {error}"
+                        }
+                    )
+        
+        # 초기화 중이면 기본 응답 반환
+        return ChatResponse(
+            session_id=chat_request.session_id or get_or_create_session(),
+            user_message=chat_request.message,
+            response="안녕하세요. AI 모델이 아직 초기화 중입니다. 잠시만 기다려주시면 정상적으로 응답드리겠습니다.",
+            crisis_detected=False,
+            crisis_level=0,
+            emotions=None,
+            suggested_assessment=None,
+            response_time=0.1,
+            metadata={
+                "status": "initializing",
+                "message": "LLM is still initializing"
+            }
+        )
         # LLM이 없어도 process_message가 기본 응답을 반환하므로 계속 진행
 
     try:
@@ -685,11 +868,42 @@ async def chat(
         # Use session history if not provided
         history = chat_request.conversation_history or session_data["conversation_history"]
 
+        # 이미지 감정 분석 (이미지가 있는 경우)
+        image_emotion_result = None
+        if chat_request.image_base64:
+            try:
+                from src.image_emotion_analyzer import get_image_emotion_analyzer
+                import asyncio
+                image_analyzer = get_image_emotion_analyzer()
+                image_emotion_result = await asyncio.to_thread(
+                    image_analyzer.analyze,
+                    chat_request.image_base64
+                )
+                logger.info(f"Image emotion analysis result: {image_emotion_result.get('primary_emotion', 'unknown')}")
+            except Exception as e:
+                logger.warning(f"Failed to analyze image emotion: {e}")
+
         # Add user context to message for personalized responses
         enhanced_message = chat_request.message
+        
+        # 이미지 감정 분석 결과를 메시지에 통합
+        if image_emotion_result and image_emotion_result.get("face_detected"):
+            image_emotion = image_emotion_result.get("primary_emotion", "중립")
+            image_confidence = image_emotion_result.get("confidence", 0.0)
+            image_emotions_detail = image_emotion_result.get("emotions", {})
+            
+            # 감정 상세 정보 문자열 생성
+            emotion_details = ", ".join([
+                f"{emotion}({score:.2f})" 
+                for emotion, score in sorted(image_emotions_detail.items(), key=lambda x: x[1], reverse=True)[:3]
+            ])
+            
+            image_context = f"\n\n[웹캠 이미지 분석 결과]\n- 주요 감정: {image_emotion} (신뢰도: {image_confidence:.1%})\n- 감정 분포: {emotion_details}\n- 얼굴 감지: 성공"
+            enhanced_message = chat_request.message + image_context
+        
         if user_context:
             # Prepend context for LLM (will be processed but not shown to user)
-            enhanced_message = f"{user_context}\n\n[사용자 메시지]\n{chat_request.message}"
+            enhanced_message = f"{user_context}\n\n[사용자 메시지]\n{enhanced_message}"
 
         # Process message through integrated system
         try:
@@ -794,6 +1008,115 @@ async def chat(
         api_requests.labels(method="POST", endpoint="/chat", status="200").inc()
         api_response_time.labels(endpoint="/chat").observe(response_time)
 
+        # Generate TTS audio using Zonos
+        audio_base64 = None
+        audio_duration = None
+        try:
+            # TTS 엔진 직접 사용
+            from src.tts import ZonosTTS, CounselorVoice, SpeechConfig
+            import asyncio
+            import base64
+            
+            # TTS 인스턴스 가져오기 (전역 변수로 관리)
+            global _tts_engine
+            if '_tts_engine' not in globals():
+                _tts_engine = None
+            
+            if _tts_engine is None:
+                _tts_engine = ZonosTTS()
+                await asyncio.to_thread(_tts_engine.load_model)
+                
+                # voice_profiles 폴더의 모든 프로필 자동 로드
+                try:
+                    voice_profiles_dir = Path(__file__).parent.parent / "voice_profiles"
+                    if voice_profiles_dir.exists():
+                        # profiles.json이 있으면 우선 확인
+                        profiles_config = voice_profiles_dir / "profiles.json"
+                        if profiles_config.exists():
+                            import json
+                            with open(profiles_config, 'r', encoding='utf-8') as f:
+                                profiles_data = json.load(f)
+                                # profiles.json에 정의된 프로필 로드
+                                for profile_info in profiles_data.get('profiles', []):
+                                    # profile_info가 dict인 경우 id 필드 사용, 아니면 문자열로 처리
+                                    profile_id = profile_info.get('id') if isinstance(profile_info, dict) else profile_info
+                                    profile_path = voice_profiles_dir / profile_id
+                                    if profile_path.with_suffix('.json').exists():
+                                        try:
+                                            profile = await asyncio.to_thread(
+                                                _tts_engine.load_voice_profile,
+                                                str(profile_path)
+                                            )
+                                            logger.info(f"Loaded voice profile from profiles.json: {profile.name}")
+                                            # 기본 프로필 설정
+                                            if profiles_data.get('default_profile') == profile_id or not _tts_engine.default_voice:
+                                                _tts_engine.default_voice = profile.name
+                                        except Exception as e:
+                                            logger.warning(f"Failed to load profile {profile_id}: {e}")
+                        else:
+                            # profiles.json이 없으면 폴더의 모든 .json 파일 찾기
+                            profile_files = list(voice_profiles_dir.glob("*.json"))
+                            for profile_file in profile_files:
+                                # profiles.json은 제외
+                                if profile_file.name == "profiles.json":
+                                    continue
+                                profile_name = profile_file.stem
+                                try:
+                                    profile = await asyncio.to_thread(
+                                        _tts_engine.load_voice_profile,
+                                        str(profile_file.with_suffix(''))  # 확장자 제거
+                                    )
+                                    logger.info(f"Loaded voice profile: {profile.name}")
+                                    if not _tts_engine.default_voice:
+                                        _tts_engine.default_voice = profile.name
+                                except Exception as e:
+                                    logger.warning(f"Failed to load profile {profile_name}: {e}")
+                except Exception as e:
+                    logger.warning(f"Failed to load voice profiles: {e}")
+                    # 기본 음성 프로필 사용
+            
+            if _tts_engine and _tts_engine.model:
+                logger.info("Generating TTS audio for chat response...")
+                
+                # 감정에 따른 음성 설정
+                emotion = result.get("emotions", {}).get("primary_emotion", "neutral") if result.get("emotions") else "neutral"
+                speech_config = CounselorVoice.get_config_for_context({
+                    "emotion": emotion,
+                    "response_type": "default"
+                })
+                
+                # 클론된 음성 프로필 사용 (있으면)
+                voice_profile_name = _tts_engine.default_voice or "default_counselor"
+                if voice_profile_name not in _tts_engine.voice_profiles:
+                    voice_profile_name = None
+                
+                # TTS 합성 (비동기)
+                # 긴 텍스트의 경우 문장 단위로 분할하여 처리
+                # Zonos는 긴 텍스트를 처리할 때 중간에 멈출 수 있으므로
+                # 문장 단위로 나누어 합성 후 결합
+                logger.info(f"TTS synthesis starting for text length: {len(response_text)} characters")
+                
+                synthesis_result = await asyncio.to_thread(
+                    _tts_engine.synthesize,
+                    response_text,
+                    voice_profile_name,  # 클론된 음성 프로필 사용
+                    speech_config
+                )
+                
+                logger.info(f"TTS synthesis completed: duration={synthesis_result.duration:.2f}s, audio_length={len(synthesis_result.audio)}")
+                
+                # 오디오를 base64로 인코딩
+                audio_bytes = synthesis_result.to_bytes(format="wav")
+                audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+                audio_duration = synthesis_result.duration
+                
+                logger.info(f"TTS audio generated: {audio_duration:.2f}s (voice: {voice_profile_name})")
+        except Exception as e:
+            logger.warning(f"Failed to generate TTS audio: {e}")
+            # TTS 실패해도 텍스트 응답은 정상 반환
+            audio_base64 = None
+            audio_duration = None
+
         # Build response
         return ChatResponse(
             session_id=session_id,
@@ -803,7 +1126,9 @@ async def chat(
             emotions=result.get("emotions"),
             suggested_assessment=result.get("suggested_assessment"),
             response_time=response_time,
-            metadata=result.get("metadata", {})
+            metadata=result.get("metadata", {}),
+            audio_base64=audio_base64,
+            audio_duration=audio_duration
         )
 
     except HTTPException:
@@ -815,6 +1140,414 @@ async def chat(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Internal server error: {str(e)}"
         )
+
+
+@app.post("/api/v1/chat/stream", tags=["Chat"])
+@limiter.limit("100/minute")
+async def chat_stream(
+    request: Request,
+    chat_request: ChatRequest,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    스트리밍 채팅 엔드포인트
+    
+    LLM의 스트리밍 출력을 실시간으로 TTS로 변환하여 전송합니다.
+    Server-Sent Events (SSE) 형식으로 응답을 스트리밍합니다.
+    
+    - **session_id**: Optional session ID (will be generated if not provided)
+    - **user_id**: Optional user identifier for personalization
+    - **message**: User message (required)
+    - **conversation_history**: Optional conversation history
+    - **consent**: Data storage consent (default: true)
+    """
+    import json
+    import asyncio
+    import base64
+    from typing import AsyncGenerator
+    
+    # 시스템 초기화 확인
+    if not mental_health_system:
+        async def error_stream():
+            yield f"data: {json.dumps({'type': 'error', 'message': '시스템이 아직 초기화 중입니다.'})}\n\n"
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
+    
+    if not hasattr(mental_health_system, 'llm') or mental_health_system.llm is None:
+        async def error_stream():
+            yield f"data: {json.dumps({'type': 'error', 'message': 'AI 모델이 아직 초기화 중입니다.'})}\n\n"
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
+    
+    async def generate_stream() -> AsyncGenerator[str, None]:
+        """스트리밍 응답 생성"""
+        # json과 asyncio를 명시적으로 참조 (스코프 문제 방지)
+        import json as json_module
+        import asyncio as asyncio_module
+        
+        session_id = None
+        try:
+            # 세션 관리
+            session_id = get_or_create_session(chat_request.session_id)
+            session_data = sessions.get(session_id, {
+                "conversation_history": [],
+                "crisis_detected_count": 0,
+                "created_at": datetime.now()
+            })
+            
+            # Personalization
+            pm_user_id = None
+            is_new_user = False
+            personalized_greeting = None
+            user_context = ""
+            
+            if personalization_manager and chat_request.user_id:
+                try:
+                    pm_user_id, is_new_user = personalization_manager.get_or_create_user(
+                        user_identifier=chat_request.user_id,
+                        consent=chat_request.consent
+                    )
+                    
+                    if len(session_data["conversation_history"]) == 0:
+                        personalized_greeting = personalization_manager.get_personalized_greeting(
+                            pm_user_id, is_new_user
+                        )
+                    
+                    user_context = personalization_manager.generate_personalized_context(pm_user_id)
+                except Exception as e:
+                    logger.warning(f"Personalization error: {e}")
+            
+            # 이미지 감정 분석 (이미지가 있는 경우)
+            image_emotion_result = None
+            if chat_request.image_base64:
+                try:
+                    from src.image_emotion_analyzer import get_image_emotion_analyzer
+                    image_analyzer = get_image_emotion_analyzer()
+                    image_emotion_result = await asyncio_module.to_thread(
+                        image_analyzer.analyze,
+                        chat_request.image_base64
+                    )
+                    logger.info(f"Image emotion analysis result: {image_emotion_result.get('primary_emotion', 'unknown')}")
+                except Exception as e:
+                    logger.warning(f"Failed to analyze image emotion: {e}")
+            
+            # 메시지 준비
+            history = chat_request.conversation_history or session_data["conversation_history"]
+            enhanced_message = chat_request.message
+            
+            # 이미지 감정 분석 결과를 메시지에 통합
+            if image_emotion_result and image_emotion_result.get("face_detected"):
+                image_emotion = image_emotion_result.get("primary_emotion", "중립")
+                image_confidence = image_emotion_result.get("confidence", 0.0)
+                image_emotions_detail = image_emotion_result.get("emotions", {})
+                
+                # 감정 상세 정보 문자열 생성
+                emotion_details = ", ".join([
+                    f"{emotion}({score:.2f})" 
+                    for emotion, score in sorted(image_emotions_detail.items(), key=lambda x: x[1], reverse=True)[:3]
+                ])
+                
+                image_context = f"\n\n[웹캠 이미지 분석 결과]\n- 주요 감정: {image_emotion} (신뢰도: {image_confidence:.1%})\n- 감정 분포: {emotion_details}\n- 얼굴 감지: 성공"
+                enhanced_message = chat_request.message + image_context
+            
+            if user_context:
+                enhanced_message = f"{user_context}\n\n[사용자 메시지]\n{enhanced_message}"
+            
+            # 세션 ID 전송
+            yield f"data: {json_module.dumps({'type': 'session', 'session_id': session_id})}\n\n"
+            
+            # StreamingTTS 초기화
+            from src.streaming_tts import StreamingTTS, StreamingTTSConfig
+            from src.gpu_check import require_gpu
+            
+            # GPU 필수 - 감지 실패 시 상세 에러 로그와 함께 예외 발생
+            device = require_gpu("cuda")
+            tts_config = StreamingTTSConfig(
+                voice_profile="seoyun_teacher",
+                default_emotion="calm"
+            )
+            streaming_tts = StreamingTTS(config=tts_config, device=device)
+            
+            # 음성 프로필 로드 (StreamingTTS의 엔진이 ZonosTTS인 경우)
+            # 음성 프로필 로드 (StreamingTTS의 엔진이 ZonosTTS인 경우)
+            # _tts_engine과 동일한 방식으로 모든 프로필 로드
+            if streaming_tts.engine and hasattr(streaming_tts.engine, 'load_voice_profile'):
+                try:
+                    voice_profiles_dir = Path(__file__).parent.parent / "voice_profiles"
+                    if voice_profiles_dir.exists():
+                        # profiles.json이 있으면 우선 확인
+                        profiles_config = voice_profiles_dir / "profiles.json"
+                        if profiles_config.exists():
+                            import json
+                            with open(profiles_config, 'r', encoding='utf-8') as f:
+                                profiles_data = json.load(f)
+                                # profiles.json에 정의된 프로필 로드
+                                for profile_info in profiles_data.get('profiles', []):
+                                    profile_id = profile_info.get('id') if isinstance(profile_info, dict) else profile_info
+                                    profile_path = voice_profiles_dir / profile_id
+                                    if profile_path.with_suffix('.json').exists():
+                                        try:
+                                            profile = await asyncio_module.to_thread(
+                                                streaming_tts.engine.load_voice_profile,
+                                                str(profile_path)
+                                            )
+                                            logger.info(f"Loaded voice profile for streaming from profiles.json: {profile.name}")
+                                            if not streaming_tts.engine.default_voice:
+                                                streaming_tts.engine.default_voice = profile.name
+                                        except Exception as e:
+                                            logger.warning(f"Failed to load streaming profile {profile_id}: {e}")
+                        else:
+                            # profiles.json이 없으면 폴더의 모든 .json 파일 찾기
+                            profile_files = list(voice_profiles_dir.glob("*.json"))
+                            for profile_file in profile_files:
+                                # profiles.json은 제외
+                                if profile_file.name == "profiles.json":
+                                    continue
+                                profile_name = profile_file.stem
+                                try:
+                                    profile = await asyncio_module.to_thread(
+                                        streaming_tts.engine.load_voice_profile,
+                                        str(profile_file.with_suffix(''))  # 확장자 제거
+                                    )
+                                    logger.info(f"Loaded voice profile for streaming: {profile.name}")
+                                    if not streaming_tts.engine.default_voice:
+                                        streaming_tts.engine.default_voice = profile.name
+                                except Exception as e:
+                                    logger.warning(f"Failed to load streaming profile {profile_name}: {e}")
+                except Exception as e:
+                    logger.warning(f"Failed to load voice profiles for streaming: {e}")
+            
+            # LLM 스트리밍 출력 생성
+            response_text = ""
+            full_response_text = ""
+            
+            # LLM 스트리밍이 지원되는지 확인
+            if hasattr(mental_health_system.llm, 'generate_response_stream_async'):
+                # 비동기 스트리밍 - 텍스트를 먼저 모은 후 TTS 생성 (깨짐 방지)
+                try:
+                    async for chunk in mental_health_system.llm.generate_response_stream_async(
+                        enhanced_message,
+                        history
+                    ):
+                        if chunk:  # 빈 청크는 무시
+                            full_response_text += chunk
+                            # 부분 텍스트 전송 (실시간 표시용)
+                            yield f"data: {json_module.dumps({'type': 'text', 'text': full_response_text, 'is_partial': True})}\n\n"
+                except Exception as stream_error:
+                    logger.error(f"LLM streaming error: {stream_error}", exc_info=True)
+                    # 스트리밍 오류 시 기본 응답 생성
+                    if not full_response_text:
+                        try:
+                            full_response_text = await asyncio_module.to_thread(
+                                mental_health_system.llm.generate_response,
+                                enhanced_message,
+                                history
+                            )
+                        except Exception as fallback_error:
+                            logger.error(f"Fallback response generation failed: {fallback_error}")
+                            full_response_text = "죄송합니다. 응답 생성 중 오류가 발생했습니다."
+                    yield f"data: {json_module.dumps({'type': 'warning', 'message': '스트리밍 중 오류가 발생했습니다. 응답을 계속 진행합니다.'})}\n\n"
+                
+                # 최종 텍스트 전송
+                yield f"data: {json_module.dumps({'type': 'text', 'text': full_response_text, 'is_partial': False})}\n\n"
+                
+                # 감정/위기 분석 (비동기로 수행, 응답 지연 최소화)
+                try:
+                    # 빠른 감정 분석만 수행
+                    if mental_health_system.emotion_analyzer:
+                        emotion_result = mental_health_system.emotion_analyzer.analyze(enhanced_message)
+                        if emotion_result:
+                            # numpy 타입을 Python 기본 타입으로 변환
+                            emotion_result_serializable = convert_to_json_serializable(emotion_result)
+                            yield f"data: {json_module.dumps({'type': 'emotion', 'data': emotion_result_serializable})}\n\n"
+                    
+                    # 위기 감지
+                    if mental_health_system.safety_system:
+                        safety_result = mental_health_system.safety_system.detect_crisis(
+                            enhanced_message,
+                            conversation_history=history
+                        )
+                        if safety_result.get("requires_intervention"):
+                            from src.safety_system_v2 import RiskLevel
+                            risk_level = safety_result.get("risk_level", RiskLevel.NONE)
+                            crisis_level = mental_health_system._risk_level_to_int(risk_level)
+                            crisis_data = {
+                                'type': 'crisis',
+                                'crisis_detected': True,
+                                'crisis_level': crisis_level,
+                                'crisis_details': convert_to_json_serializable(safety_result)
+                            }
+                            yield f"data: {json_module.dumps(crisis_data)}\n\n"
+                except Exception as e:
+                    logger.warning(f"Error in emotion/crisis analysis: {e}")
+                
+                # TTS - 전체 텍스트를 하나의 WAV로 변환 (깨짐 방지)
+                try:
+                    from src.tts import SpeechConfig
+                    
+                    # ZonosTTS 직접 사용하여 전체 텍스트 합성
+                    tts_result = await asyncio_module.to_thread(
+                        streaming_tts.engine.synthesize,
+                        full_response_text,
+                        streaming_tts.config.voice_profile,
+                        SpeechConfig(emotion="calm", sample_rate=24000)
+                    )
+                    
+                    if tts_result:
+                        # 완성된 WAV 바이트로 변환
+                        wav_bytes = tts_result.to_bytes(format="wav")
+                        audio_base64 = base64.b64encode(wav_bytes).decode('utf-8')
+                        
+                        audio_data = {
+                            'type': 'audio',
+                            'audio_base64': audio_base64,
+                            'sample_rate': 24000,
+                            'duration_ms': tts_result.duration * 1000,
+                            'text': full_response_text,
+                            'is_last': True
+                        }
+                        yield f"data: {json_module.dumps(audio_data)}\n\n"
+                        logger.info(f"TTS audio generated: {tts_result.duration:.2f}s for {len(full_response_text)} chars")
+                except Exception as tts_error:
+                    logger.error(f"TTS error: {tts_error}", exc_info=True)
+                    # TTS 오류가 있어도 스트림은 계속 진행 (텍스트는 이미 전송됨)
+                    yield f"data: {json_module.dumps({'type': 'warning', 'message': 'TTS 생성 중 오류가 발생했습니다. 텍스트 응답은 정상적으로 전송되었습니다.'})}\n\n"
+                
+            else:
+                # 비스트리밍 LLM - 전체 응답 생성 후 TTS
+                result = mental_health_system.process_message(
+                    session_id=session_id,
+                    user_message=enhanced_message,
+                    conversation_history=history
+                )
+                
+                if result and "response" in result:
+                    full_response_text = result["response"]
+                    if personalized_greeting:
+                        full_response_text = f"{personalized_greeting}\n\n{full_response_text}"
+                    
+                    # 감정 데이터 전송
+                    if result.get("emotions"):
+                        emotions_serializable = convert_to_json_serializable(result['emotions'])
+                        yield f"data: {json_module.dumps({'type': 'emotion', 'data': emotions_serializable})}\n\n"
+                    
+                    # 위기 감지 데이터 전송
+                    if result.get("crisis_detected"):
+                        crisis_data = {
+                            'type': 'crisis',
+                            'crisis_detected': result.get('crisis_detected', False),
+                            'crisis_level': result.get('crisis_level', 0),
+                            'crisis_details': convert_to_json_serializable(result.get('crisis_details'))
+                        }
+                        yield f"data: {json_module.dumps(crisis_data)}\n\n"
+                    
+                    # 치료 기법 데이터 전송 (있는 경우)
+                    if result.get("metadata", {}).get("therapy_technique"):
+                        therapy_data = {
+                            'type': 'therapy',
+                            'technique': result['metadata']['therapy_technique']
+                        }
+                        yield f"data: {json_module.dumps(therapy_data)}\n\n"
+                    
+                    # 텍스트 먼저 전송
+                    yield f"data: {json_module.dumps({'type': 'text', 'text': full_response_text, 'is_partial': False})}\n\n"
+                    
+                    # TTS - 전체 텍스트를 하나의 WAV로 변환
+                    try:
+                        from src.tts import SpeechConfig
+                        
+                        tts_result = await asyncio.to_thread(
+                            streaming_tts.engine.synthesize,
+                            full_response_text,
+                            streaming_tts.config.voice_profile,
+                            SpeechConfig(emotion="calm", sample_rate=24000)
+                        )
+                        
+                        if tts_result:
+                            wav_bytes = tts_result.to_bytes(format="wav")
+                            audio_base64 = base64.b64encode(wav_bytes).decode('utf-8')
+                            
+                            audio_data = {
+                                'type': 'audio',
+                                'audio_base64': audio_base64,
+                                'sample_rate': 24000,
+                                'duration_ms': tts_result.duration * 1000,
+                                'text': full_response_text,
+                                'is_last': True
+                            }
+                            yield f"data: {json_module.dumps(audio_data)}\n\n"
+                    except Exception as tts_error:
+                        logger.error(f"TTS error: {tts_error}")
+                    
+                    # TTS - 전체 텍스트를 하나의 WAV로 변환 (깨짐 방지)
+                    try:
+                        from src.tts import ZonosTTS, SpeechConfig
+                        
+                        # ZonosTTS 직접 사용하여 전체 텍스트 합성
+                        tts_result = await asyncio.to_thread(
+                            streaming_tts.engine.synthesize,
+                            full_response_text,
+                            streaming_tts.config.voice_profile,
+                            SpeechConfig(emotion="calm", sample_rate=24000)
+                        )
+                        
+                        if tts_result:
+                            # 완성된 WAV 바이트로 변환
+                            wav_bytes = tts_result.to_bytes(format="wav")
+                            audio_base64 = base64.b64encode(wav_bytes).decode('utf-8')
+                            
+                            audio_data = {
+                                'type': 'audio',
+                                'audio_base64': audio_base64,
+                                'sample_rate': 24000,
+                                'duration_ms': tts_result.duration * 1000,
+                                'text': full_response_text,
+                                'is_last': True
+                            }
+                            yield f"data: {json_module.dumps(audio_data)}\n\n"
+                    except Exception as tts_error:
+                        logger.error(f"TTS error: {tts_error}")
+            
+            # 세션 히스토리 업데이트
+            session_data["conversation_history"].append({
+                "role": "user",
+                "content": chat_request.message
+            })
+            session_data["conversation_history"].append({
+                "role": "assistant",
+                "content": full_response_text
+            })
+            
+            if len(session_data["conversation_history"]) > 40:
+                session_data["conversation_history"] = session_data["conversation_history"][-40:]
+            
+            # 완료 신호
+            yield f"data: {json_module.dumps({'type': 'done'})}\n\n"
+            
+        except Exception as e:
+            logger.error(f"Streaming error: {e}", exc_info=True)
+            # 오류 발생 시에도 스트림을 제대로 종료
+            try:
+                yield f"data: {json_module.dumps({'type': 'error', 'message': str(e)[:200]})}\n\n"
+                yield f"data: {json_module.dumps({'type': 'done'})}\n\n"
+            except Exception as final_error:
+                logger.error(f"Error sending final error message: {final_error}")
+        finally:
+            # 스트림이 항상 완료되도록 보장
+            try:
+                # 이미 done 메시지를 보냈는지 확인하기 위해 빈 yield는 하지 않음
+                # 대신 로깅만 수행
+                logger.debug(f"Stream completed for session: {session_id}")
+            except:
+                pass
+    
+    return StreamingResponse(
+        generate_stream(), 
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # nginx 버퍼링 비활성화
+        }
+    )
 
 
 @app.get("/api/v1/session/{session_id}", response_model=SessionResponse, tags=["Session"])
