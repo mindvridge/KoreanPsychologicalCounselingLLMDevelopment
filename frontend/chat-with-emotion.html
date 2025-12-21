@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>마음챗 - AI 심리상담 (감정 분석)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="realtime-emotion.css">
+    <style>
+        /* 채팅 + 감정 분석 레이아웃 */
+        .chat-emotion-layout {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: var(--space-md);
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: var(--space-md);
+            height: calc(100vh - 80px);
+        }
+
+        @media (max-width: 1024px) {
+            .chat-emotion-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .emotion-sidebar {
+                position: fixed;
+                right: 0;
+                top: 60px;
+                bottom: 0;
+                width: 320px;
+                transform: translateX(100%);
+                transition: transform 0.3s ease;
+                z-index: 100;
+                background: var(--bg);
+                box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
+            }
+
+            .emotion-sidebar.open {
+                transform: translateX(0);
+            }
+        }
+
+        /* 채팅 영역 */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            background: var(--surface);
+            border-radius: var(--radius-lg);
+            box-shadow: 0 2px 8px var(--shadow);
+            overflow: hidden;
+        }
+
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-md);
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+        }
+
+        .chat-header-info {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .counselor-avatar {
+            width: 48px;
+            height: 48px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .counselor-info h3 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        .counselor-info span {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+
+        .chat-header-actions {
+            display: flex;
+            gap: var(--space-xs);
+        }
+
+        .header-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 8px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: background 0.2s;
+        }
+
+        .header-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .header-btn.active {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        /* 메시지 영역 */
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: var(--space-md);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+        }
+
+        .message {
+            display: flex;
+            gap: var(--space-sm);
+            max-width: 80%;
+            animation: messageSlide 0.3s ease;
+        }
+
+        @keyframes messageSlide {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        .message.counselor .message-avatar {
+            background: var(--primary-light);
+        }
+
+        .message.user .message-avatar {
+            background: var(--accent);
+        }
+
+        .message-content {
+            padding: var(--space-sm) var(--space-md);
+            border-radius: var(--radius-lg);
+            line-height: 1.6;
+        }
+
+        .message.counselor .message-content {
+            background: var(--bg);
+            border-bottom-left-radius: 4px;
+        }
+
+        .message.user .message-content {
+            background: var(--primary);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message-emotion {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.75rem;
+            color: var(--text-light);
+            margin-top: 4px;
+        }
+
+        .message.user .message-emotion {
+            color: rgba(255, 255, 255, 0.8);
+            justify-content: flex-end;
+        }
+
+        /* 입력 영역 */
+        .chat-input-area {
+            padding: var(--space-md);
+            border-top: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: var(--space-sm);
+            align-items: flex-end;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: var(--space-sm) var(--space-md);
+            border: 2px solid var(--border);
+            border-radius: var(--radius-lg);
+            font-size: 1rem;
+            resize: none;
+            min-height: 48px;
+            max-height: 120px;
+            transition: border-color 0.2s;
+            font-family: inherit;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .send-btn {
+            width: 48px;
+            height: 48px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+        }
+
+        .send-btn:hover {
+            background: var(--primary-dark);
+            transform: scale(1.05);
+        }
+
+        .send-btn:disabled {
+            background: var(--border);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* 빠른 액션 */
+        .quick-actions-bar {
+            display: flex;
+            gap: var(--space-xs);
+            padding: var(--space-sm) 0;
+            overflow-x: auto;
+        }
+
+        .quick-action {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-full);
+            font-size: 0.85rem;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .quick-action:hover {
+            border-color: var(--primary);
+            background: rgba(91, 138, 114, 0.1);
+        }
+
+        /* 감정 컨텍스트 배너 */
+        .emotion-context-banner {
+            display: none;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: var(--space-sm) var(--space-md);
+            background: linear-gradient(135deg, rgba(91, 138, 114, 0.1), rgba(232, 178, 152, 0.1));
+            border-bottom: 1px solid var(--border);
+        }
+
+        .emotion-context-banner.active {
+            display: flex;
+        }
+
+        .emotion-context-icon {
+            font-size: 1.3rem;
+        }
+
+        .emotion-context-text {
+            flex: 1;
+            font-size: 0.9rem;
+            color: var(--text);
+        }
+
+        .emotion-context-close {
+            background: none;
+            border: none;
+            color: var(--text-light);
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+
+        /* 감정 사이드바 토글 버튼 (모바일) */
+        .emotion-toggle-fab {
+            display: none;
+            position: fixed;
+            right: var(--space-md);
+            bottom: 100px;
+            width: 56px;
+            height: 56px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(91, 138, 114, 0.4);
+            z-index: 99;
+        }
+
+        @media (max-width: 1024px) {
+            .emotion-toggle-fab {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+        }
+
+        /* 위기 지원 */
+        .crisis-banner {
+            display: none;
+            padding: var(--space-sm) var(--space-md);
+            background: rgba(217, 123, 123, 0.1);
+            border-bottom: 2px solid var(--danger);
+        }
+
+        .crisis-banner.active {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .crisis-banner-text {
+            flex: 1;
+            color: var(--danger);
+            font-weight: 500;
+        }
+
+        .crisis-btn {
+            background: var(--danger);
+            color: white;
+            border: none;
+            padding: var(--space-xs) var(--space-md);
+            border-radius: var(--radius);
+            cursor: pointer;
+        }
+
+        /* 타이핑 인디케이터 */
+        .typing-indicator {
+            display: none;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: var(--space-sm);
+        }
+
+        .typing-indicator.active {
+            display: flex;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--primary);
+            border-radius: 50%;
+            animation: typingBounce 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typingBounce {
+            0%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-6px); }
+        }
+
+        /* 세션 정보 */
+        .session-info-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-xs) var(--space-md);
+            background: var(--bg);
+            font-size: 0.8rem;
+            color: var(--text-light);
+        }
+    </style>
+</head>
+<body>
+    <!-- 헤더 -->
+    <header class="header">
+        <div class="header-content">
+            <a href="dashboard.html" class="logo">💚 마음챗</a>
+            <nav class="header-nav">
+                <a href="dashboard.html" class="nav-link">대시보드</a>
+                <a href="chat-with-emotion.html" class="nav-link active">상담하기</a>
+            </nav>
+            <div class="user-info">
+                <button class="btn-icon" title="알림">🔔</button>
+                <button class="btn-icon user-avatar" title="프로필">👤</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 레이아웃 -->
+    <main class="chat-emotion-layout">
+        <!-- 채팅 영역 -->
+        <div class="chat-container">
+            <!-- 채팅 헤더 -->
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <div class="counselor-avatar">🧑‍⚕️</div>
+                    <div class="counselor-info">
+                        <h3>마음이 상담사</h3>
+                        <span>🟢 대화 가능</span>
+                    </div>
+                </div>
+                <div class="chat-header-actions">
+                    <button class="header-btn" id="toggle-emotion-btn" title="감정 분석">
+                        🎭
+                    </button>
+                    <button class="header-btn" id="breathing-btn" title="호흡하기">
+                        😮‍💨
+                    </button>
+                    <button class="header-btn" id="crisis-btn" title="위기 지원">
+                        🆘
+                    </button>
+                </div>
+            </div>
+
+            <!-- 위기 배너 -->
+            <div class="crisis-banner" id="crisis-banner">
+                <span>⚠️</span>
+                <span class="crisis-banner-text">힘든 감정이 감지되었습니다. 도움이 필요하신가요?</span>
+                <button class="crisis-btn" onclick="openCrisisSupport()">도움 요청</button>
+            </div>
+
+            <!-- 감정 컨텍스트 배너 -->
+            <div class="emotion-context-banner" id="emotion-context-banner">
+                <span class="emotion-context-icon" id="context-emoji">😐</span>
+                <span class="emotion-context-text" id="context-text">감정 분석 중...</span>
+                <button class="emotion-context-close" onclick="hideEmotionContext()">✕</button>
+            </div>
+
+            <!-- 세션 정보 -->
+            <div class="session-info-bar">
+                <span>회기 #8 • 진행 시간: <span id="session-time">00:00</span></span>
+                <span id="emotion-status">감정 분석: 비활성</span>
+            </div>
+
+            <!-- 메시지 영역 -->
+            <div class="chat-messages" id="chat-messages">
+                <!-- 환영 메시지 -->
+                <div class="message counselor">
+                    <div class="message-avatar">🧑‍⚕️</div>
+                    <div class="message-content">
+                        안녕하세요, 민수님! 오늘도 만나뵙게 되어 반갑습니다. 😊<br><br>
+                        지난 주에 이야기 나눴던 것들은 어떻게 되셨나요? 오늘은 어떤 이야기를 나눠볼까요?
+                    </div>
+                </div>
+            </div>
+
+            <!-- 타이핑 인디케이터 -->
+            <div class="typing-indicator" id="typing-indicator">
+                <div class="message-avatar" style="background: var(--primary-light);">🧑‍⚕️</div>
+                <div class="typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </div>
+
+            <!-- 입력 영역 -->
+            <div class="chat-input-area">
+                <div class="quick-actions-bar">
+                    <button class="quick-action" onclick="insertQuickText('오늘 기분이 좋아요')">😊 기분 좋음</button>
+                    <button class="quick-action" onclick="insertQuickText('조금 힘들었어요')">😔 힘들었음</button>
+                    <button class="quick-action" onclick="insertQuickText('호흡 연습을 해봤어요')">🫁 호흡 연습</button>
+                    <button class="quick-action" onclick="insertQuickText('숙제를 해왔어요')">📝 숙제 완료</button>
+                </div>
+                <div class="chat-input-wrapper">
+                    <textarea class="chat-input" id="chat-input"
+                              placeholder="메시지를 입력하세요..."
+                              rows="1"></textarea>
+                    <button class="send-btn" id="send-btn" onclick="sendMessage()">
+                        ➤
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 감정 분석 사이드바 -->
+        <aside class="emotion-sidebar" id="emotion-sidebar">
+            <div id="realtime-emotion-container"></div>
+        </aside>
+    </main>
+
+    <!-- 모바일 감정 토글 FAB -->
+    <button class="emotion-toggle-fab" id="emotion-toggle-fab" onclick="toggleEmotionSidebar()">
+        🎭
+    </button>
+
+    <!-- 스크립트 -->
+    <script src="config.js"></script>
+    <script src="realtime-emotion.js"></script>
+    <script>
+        // ============================================================================
+        // 앱 상태
+        // ============================================================================
+
+        const AppState = {
+            sessionId: 'session_' + Date.now(),
+            sessionStartTime: Date.now(),
+            messageCount: 0,
+            emotionEnabled: false,
+            currentEmotion: null
+        };
+
+        // ============================================================================
+        // 초기화
+        // ============================================================================
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // 실시간 감정 분석 초기화
+            window.realtimeEmotion = new RealtimeEmotionUI('realtime-emotion-container');
+
+            // 감정 콜백 설정
+            window.realtimeEmotion.onEmotionDetected = handleEmotionDetected;
+            window.realtimeEmotion.onAlertTriggered = handleEmotionAlert;
+
+            // 입력 이벤트
+            const input = document.getElementById('chat-input');
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            // 입력 높이 자동 조절
+            input.addEventListener('input', () => {
+                input.style.height = 'auto';
+                input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+            });
+
+            // 세션 타이머
+            startSessionTimer();
+
+            // 감정 분석 토글 버튼
+            document.getElementById('toggle-emotion-btn').addEventListener('click', toggleEmotionAnalysis);
+        });
+
+        // ============================================================================
+        // 메시지 처리
+        // ============================================================================
+
+        async function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            // 사용자 메시지 추가
+            addMessage('user', message);
+            input.value = '';
+            input.style.height = 'auto';
+
+            // 타이핑 표시
+            showTypingIndicator();
+
+            // 감정 컨텍스트 생성
+            let emotionContext = '';
+            if (AppState.emotionEnabled && window.realtimeEmotion) {
+                emotionContext = window.realtimeEmotion.generateContextForLLM();
+            }
+
+            // API 호출 (시뮬레이션)
+            try {
+                const response = await simulateCounselorResponse(message, emotionContext);
+                hideTypingIndicator();
+                addMessage('counselor', response);
+            } catch (error) {
+                hideTypingIndicator();
+                addMessage('counselor', '죄송합니다, 잠시 문제가 발생했습니다. 다시 말씀해 주시겠어요?');
+            }
+        }
+
+        function addMessage(type, content) {
+            const container = document.getElementById('chat-messages');
+            const message = document.createElement('div');
+            message.className = `message ${type}`;
+
+            const avatar = type === 'counselor' ? '🧑‍⚕️' : '😊';
+            const emotionBadge = type === 'user' && AppState.currentEmotion ?
+                `<div class="message-emotion">
+                    <span>${EmotionConfig.emotions[AppState.currentEmotion.primary]?.emoji || '😐'}</span>
+                    <span>${Math.round(AppState.currentEmotion.confidence * 100)}%</span>
+                </div>` : '';
+
+            message.innerHTML = `
+                <div class="message-avatar">${avatar}</div>
+                <div>
+                    <div class="message-content">${content}</div>
+                    ${emotionBadge}
+                </div>
+            `;
+
+            container.appendChild(message);
+            container.scrollTop = container.scrollHeight;
+
+            AppState.messageCount++;
+        }
+
+        async function simulateCounselorResponse(userMessage, emotionContext) {
+            // 실제 구현에서는 API 호출
+            await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+
+            // 감정 기반 응답
+            if (emotionContext && emotionContext.includes('슬픔')) {
+                return '그런 마음이 드셨군요... 힘드셨겠어요. 조금 더 자세히 이야기해 주실 수 있을까요? 무엇이 가장 마음에 걸리세요?';
+            }
+
+            if (userMessage.includes('힘들')) {
+                return '힘드셨군요. 그런 감정을 느끼는 것은 자연스러운 거예요. 어떤 상황에서 특히 힘드셨나요?';
+            }
+
+            if (userMessage.includes('좋아')) {
+                return '기분이 좋으시다니 다행이에요! 😊 어떤 일이 있으셨나요? 좋은 기분을 나눠주세요.';
+            }
+
+            if (userMessage.includes('숙제')) {
+                return '숙제를 해오셨군요! 정말 잘하셨어요. 연습하시면서 어떤 느낌이 드셨나요?';
+            }
+
+            if (userMessage.includes('호흡')) {
+                return '호흡 연습을 하셨군요. 연습 후 몸과 마음이 어떻게 느껴지셨나요? 어떤 변화가 있었는지 궁금해요.';
+            }
+
+            // 기본 응답
+            const responses = [
+                '그렇군요. 조금 더 자세히 말씀해 주시겠어요?',
+                '네, 이해해요. 그런 상황에서 어떤 생각이 드셨나요?',
+                '말씀 감사해요. 그 경험이 어떻게 느껴지셨는지 궁금해요.',
+                '그런 마음이 드셨군요. 그 감정을 좀 더 탐색해 볼까요?'
+            ];
+
+            return responses[Math.floor(Math.random() * responses.length)];
+        }
+
+        // ============================================================================
+        // 감정 분석 핸들러
+        // ============================================================================
+
+        function handleEmotionDetected(result) {
+            AppState.currentEmotion = {
+                primary: result.primaryEmotion,
+                confidence: result.confidence,
+                valence: result.valence
+            };
+
+            // 상태 업데이트
+            document.getElementById('emotion-status').textContent =
+                `감정: ${EmotionConfig.emotions[result.primaryEmotion]?.emoji || '😐'} ${EmotionConfig.emotions[result.primaryEmotion]?.label || result.primaryEmotion}`;
+
+            // 컨텍스트 배너 업데이트
+            if (result.confidence > 0.6) {
+                updateEmotionContext(result);
+            }
+        }
+
+        function handleEmotionAlert(alerts) {
+            alerts.forEach(alert => {
+                if (alert.type === 'sadness' || alert.type === 'fear') {
+                    document.getElementById('crisis-banner').classList.add('active');
+                }
+            });
+        }
+
+        function updateEmotionContext(result) {
+            const banner = document.getElementById('emotion-context-banner');
+            const emoji = document.getElementById('context-emoji');
+            const text = document.getElementById('context-text');
+
+            emoji.textContent = EmotionConfig.emotions[result.primaryEmotion]?.emoji || '😐';
+            text.textContent = result.counseling_context || `${EmotionConfig.emotions[result.primaryEmotion]?.label} 감정이 감지되었습니다.`;
+
+            if (result.valence < -0.3) {
+                banner.classList.add('active');
+            }
+        }
+
+        function hideEmotionContext() {
+            document.getElementById('emotion-context-banner').classList.remove('active');
+        }
+
+        // ============================================================================
+        // UI 헬퍼
+        // ============================================================================
+
+        function toggleEmotionAnalysis() {
+            AppState.emotionEnabled = !AppState.emotionEnabled;
+            const btn = document.getElementById('toggle-emotion-btn');
+
+            if (AppState.emotionEnabled) {
+                btn.classList.add('active');
+                document.getElementById('emotion-status').textContent = '감정 분석: 활성화';
+            } else {
+                btn.classList.remove('active');
+                document.getElementById('emotion-status').textContent = '감정 분석: 비활성';
+            }
+        }
+
+        function toggleEmotionSidebar() {
+            const sidebar = document.getElementById('emotion-sidebar');
+            sidebar.classList.toggle('open');
+        }
+
+        function showTypingIndicator() {
+            document.getElementById('typing-indicator').classList.add('active');
+        }
+
+        function hideTypingIndicator() {
+            document.getElementById('typing-indicator').classList.remove('active');
+        }
+
+        function insertQuickText(text) {
+            const input = document.getElementById('chat-input');
+            input.value = text;
+            input.focus();
+        }
+
+        function startSessionTimer() {
+            setInterval(() => {
+                const elapsed = Math.floor((Date.now() - AppState.sessionStartTime) / 1000);
+                const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+                const seconds = (elapsed % 60).toString().padStart(2, '0');
+                document.getElementById('session-time').textContent = `${minutes}:${seconds}`;
+            }, 1000);
+        }
+
+        function openCrisisSupport() {
+            const confirmed = confirm(
+                '🆘 위기 지원\n\n' +
+                '지금 많이 힘드신가요?\n\n' +
+                '• 자살예방상담전화: 1393 (24시간)\n' +
+                '• 정신건강위기상담전화: 1577-0199\n\n' +
+                '전화 연결하시겠습니까?'
+            );
+
+            if (confirmed) {
+                window.location.href = 'tel:1393';
+            }
+        }
+
+        // 호흡 운동 팝업
+        document.getElementById('breathing-btn')?.addEventListener('click', () => {
+            alert('호흡 운동 기능이 곧 추가됩니다!');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,657 @@
+/* ============================================================================
+   실시간 감정 분석 스타일 (Real-time Emotion Analysis)
+   ============================================================================ */
+
+/* 메인 위젯 */
+.realtime-emotion-widget {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 12px var(--shadow);
+    overflow: hidden;
+}
+
+/* 헤더 */
+.emotion-widget-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-md);
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: white;
+}
+
+.emotion-widget-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.emotion-widget-title h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.emotion-widget-icon {
+    font-size: 1.5rem;
+}
+
+.emotion-widget-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.privacy-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.privacy-toggle input {
+    cursor: pointer;
+}
+
+.emotion-settings-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    padding: 6px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 1.1rem;
+    transition: background 0.2s;
+}
+
+.emotion-settings-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* 동의 화면 */
+.emotion-consent {
+    padding: var(--space-xl);
+    text-align: center;
+}
+
+.consent-icon {
+    font-size: 4rem;
+    margin-bottom: var(--space-md);
+}
+
+.emotion-consent h4 {
+    font-size: 1.3rem;
+    color: var(--text);
+    margin-bottom: var(--space-sm);
+}
+
+.emotion-consent > p {
+    color: var(--text-light);
+    margin-bottom: var(--space-md);
+}
+
+.consent-features {
+    list-style: none;
+    text-align: left;
+    max-width: 280px;
+    margin: 0 auto var(--space-lg);
+    padding: var(--space-md);
+    background: var(--bg);
+    border-radius: var(--radius);
+}
+
+.consent-features li {
+    padding: var(--space-xs) 0;
+    color: var(--text);
+    font-size: 0.9rem;
+}
+
+.consent-buttons {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-sm);
+}
+
+.consent-btn {
+    padding: var(--space-sm) var(--space-lg);
+    border: none;
+    border-radius: var(--radius-full);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.consent-btn-allow {
+    background: var(--primary);
+    color: white;
+}
+
+.consent-btn-allow:hover {
+    background: var(--primary-dark);
+    transform: translateY(-2px);
+}
+
+.consent-btn-skip {
+    background: var(--bg);
+    color: var(--text-light);
+}
+
+.consent-btn-skip:hover {
+    background: var(--border);
+}
+
+.consent-error {
+    padding: var(--space-lg);
+    text-align: center;
+}
+
+.consent-error .error-icon {
+    font-size: 3rem;
+    display: block;
+    margin-bottom: var(--space-md);
+}
+
+/* 메인 분석 화면 */
+.emotion-main {
+    padding: var(--space-md);
+}
+
+/* 비디오 컨테이너 */
+.emotion-video-container {
+    position: relative;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: #000;
+    margin-bottom: var(--space-md);
+}
+
+#emotion-video {
+    width: 100%;
+    height: auto;
+    display: block;
+    transform: scaleX(-1); /* 거울 모드 */
+}
+
+.face-detection-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+.face-box {
+    position: absolute;
+    border: 3px solid var(--primary);
+    border-radius: var(--radius);
+    box-shadow: 0 0 20px rgba(91, 138, 114, 0.5);
+    display: none;
+}
+
+.face-box.detected {
+    display: block;
+    animation: faceBoxPulse 2s infinite;
+}
+
+@keyframes faceBoxPulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(91, 138, 114, 0.5); }
+    50% { box-shadow: 0 0 30px rgba(91, 138, 114, 0.8); }
+}
+
+/* 현재 감정 뱃지 */
+.current-emotion-badge {
+    position: absolute;
+    top: var(--space-sm);
+    right: var(--space-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: var(--radius-full);
+    border: 3px solid var(--primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s;
+}
+
+.current-emotion-badge .emotion-emoji {
+    font-size: 1.5rem;
+}
+
+.current-emotion-badge .emotion-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* 프라이버시 오버레이 */
+.privacy-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.2rem;
+    gap: var(--space-sm);
+}
+
+.privacy-overlay span:first-child {
+    font-size: 3rem;
+}
+
+/* 감정 분포 차트 */
+.emotion-distribution {
+    margin-bottom: var(--space-md);
+}
+
+.emotion-distribution h4 {
+    font-size: 0.9rem;
+    color: var(--text-light);
+    margin-bottom: var(--space-sm);
+}
+
+.emotion-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.emotion-bar-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.emotion-bar-emoji {
+    font-size: 1.2rem;
+    width: 28px;
+    text-align: center;
+}
+
+.emotion-bar-track {
+    flex: 1;
+    height: 12px;
+    background: var(--bg);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.emotion-bar-fill {
+    height: 100%;
+    border-radius: var(--radius-full);
+    transition: width 0.3s ease;
+}
+
+.emotion-bar-value {
+    font-size: 0.8rem;
+    color: var(--text-light);
+    width: 36px;
+    text-align: right;
+}
+
+/* 감정 지표 */
+.emotion-metrics {
+    display: grid;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+    padding: var(--space-md);
+    background: var(--bg);
+    border-radius: var(--radius);
+}
+
+.metric-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.metric-label {
+    font-size: 0.85rem;
+    color: var(--text-light);
+    min-width: 100px;
+}
+
+.metric-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    border-radius: var(--radius-full);
+    position: relative;
+    overflow: hidden;
+}
+
+.metric-fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: var(--radius-full);
+    transition: width 0.3s ease;
+}
+
+.metric-value {
+    font-size: 0.8rem;
+    color: var(--text);
+    font-weight: 600;
+    min-width: 40px;
+    text-align: right;
+}
+
+/* Valence 바 (특별 스타일) */
+.valence-bar {
+    background: linear-gradient(90deg, #ef4444 0%, #6b7280 50%, #22c55e 100%);
+    height: 12px;
+    position: relative;
+}
+
+.metric-indicator {
+    position: absolute;
+    top: -4px;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border: 3px solid var(--primary);
+    border-radius: 50%;
+    transform: translateX(-50%);
+    transition: left 0.3s ease, background 0.3s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.metric-negative,
+.metric-positive {
+    position: absolute;
+    top: 16px;
+    font-size: 0.7rem;
+    color: var(--text-light);
+}
+
+.metric-negative {
+    left: 0;
+}
+
+.metric-positive {
+    right: 0;
+}
+
+/* 감정 타임라인 */
+.emotion-timeline {
+    margin-bottom: var(--space-md);
+}
+
+.emotion-timeline h4 {
+    font-size: 0.9rem;
+    color: var(--text-light);
+    margin-bottom: var(--space-sm);
+}
+
+.timeline-chart {
+    background: var(--bg);
+    border-radius: var(--radius);
+    padding: var(--space-sm);
+    height: 80px;
+}
+
+#timeline-canvas {
+    width: 100%;
+    height: 100%;
+}
+
+/* 인사이트 */
+.emotion-insight {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    background: linear-gradient(135deg, rgba(91, 138, 114, 0.1), rgba(232, 178, 152, 0.1));
+    border-radius: var(--radius);
+    margin-bottom: var(--space-md);
+}
+
+.insight-icon {
+    font-size: 1.3rem;
+}
+
+.insight-text {
+    font-size: 0.95rem;
+    color: var(--text);
+    line-height: 1.5;
+}
+
+/* 컨트롤 버튼 */
+.emotion-controls {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-sm);
+}
+
+.emotion-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    border: none;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.emotion-btn-pause {
+    background: var(--accent);
+    color: var(--text);
+}
+
+.emotion-btn-pause:hover {
+    background: #d9a078;
+}
+
+.emotion-btn-stop {
+    background: var(--bg);
+    color: var(--text-light);
+    border: 1px solid var(--border);
+}
+
+.emotion-btn-stop:hover {
+    background: var(--border);
+}
+
+/* 알림 패널 */
+.emotion-alerts {
+    position: fixed;
+    top: var(--space-lg);
+    right: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    z-index: 1000;
+}
+
+.emotion-alert {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-left: 4px solid var(--accent);
+    animation: alertSlideIn 0.3s ease;
+}
+
+@keyframes alertSlideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.emotion-alert.sadness {
+    border-left-color: #3b82f6;
+}
+
+.emotion-alert.anger {
+    border-left-color: #ef4444;
+}
+
+.emotion-alert.fear {
+    border-left-color: #a855f7;
+}
+
+.alert-icon {
+    font-size: 1.5rem;
+}
+
+.alert-message {
+    font-size: 0.9rem;
+    color: var(--text);
+}
+
+.alert-dismiss {
+    background: none;
+    border: none;
+    color: var(--text-light);
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 4px;
+}
+
+/* 미니 모드 (상담 중 사이드바) */
+.realtime-emotion-widget.mini {
+    width: 280px;
+    position: fixed;
+    right: var(--space-md);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 100;
+}
+
+.realtime-emotion-widget.mini .emotion-main {
+    padding: var(--space-sm);
+}
+
+.realtime-emotion-widget.mini .emotion-distribution,
+.realtime-emotion-widget.mini .emotion-timeline {
+    display: none;
+}
+
+.realtime-emotion-widget.mini .emotion-video-container {
+    max-height: 160px;
+}
+
+.realtime-emotion-widget.mini .emotion-metrics {
+    padding: var(--space-sm);
+}
+
+/* 최소화 상태 */
+.realtime-emotion-widget.minimized {
+    position: fixed;
+    right: var(--space-md);
+    bottom: var(--space-md);
+    width: auto;
+}
+
+.realtime-emotion-widget.minimized .emotion-widget-header {
+    padding: var(--space-sm) var(--space-md);
+    cursor: pointer;
+}
+
+.realtime-emotion-widget.minimized .emotion-consent,
+.realtime-emotion-widget.minimized .emotion-main {
+    display: none;
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+    .emotion-widget-header {
+        flex-direction: column;
+        gap: var(--space-sm);
+        text-align: center;
+    }
+
+    .emotion-widget-controls {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .realtime-emotion-widget.mini {
+        position: static;
+        width: 100%;
+        transform: none;
+    }
+
+    .emotion-alerts {
+        top: auto;
+        bottom: var(--space-md);
+        left: var(--space-md);
+        right: var(--space-md);
+    }
+}
+
+/* 다크 모드 지원 */
+@media (prefers-color-scheme: dark) {
+    .realtime-emotion-widget {
+        background: #1f2937;
+    }
+
+    .emotion-consent h4,
+    .current-emotion-badge .emotion-label,
+    .insight-text {
+        color: #f3f4f6;
+    }
+
+    .consent-features,
+    .emotion-metrics,
+    .timeline-chart {
+        background: #374151;
+    }
+
+    .emotion-bar-track,
+    .metric-bar {
+        background: #4b5563;
+    }
+}
+
+/* 애니메이션 클래스 */
+.fade-in {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.slide-up {
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 펄스 효과 (감정 변화 시) */
+.emotion-pulse {
+    animation: emotionPulse 0.5s ease;
+}
+
+@keyframes emotionPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
