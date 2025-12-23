@@ -1202,9 +1202,9 @@ function updateChatEmotionBars(emotions) {
     
     // 감정을 확률 순으로 정렬
     // 메타데이터 키 필터링 (감정이 아닌 필드들 제외)
-    const nonEmotionKeys = ['intensity', 'confidence', 'confidence_score', 'timestamp', 'primary_emotion', 'valence', 'arousal', 'engagement'];
+    const nonEmotionKeys = ['intensity', 'confidence', 'confidence_score', 'timestamp', 'primary_emotion', 'valence', 'arousal', 'engagement', 'face_detected', 'success'];
 
-    const sortedEmotions = Object.entries(emotionData)
+    let sortedEmotions = Object.entries(emotionData)
         .filter(([emotion, value]) =>
             typeof value === 'number' &&
             value > 0 &&
@@ -1213,7 +1213,17 @@ function updateChatEmotionBars(emotions) {
         .map(([emotion, value]) => ({ emotion, value }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 5); // 상위 5개만 표시
-    
+
+    // 필터링 후 감정이 없으면 primary_emotion과 intensity/confidence 사용
+    if (sortedEmotions.length === 0) {
+        const primaryEmotion = emotions.primary_emotion || emotionData.primary_emotion;
+        const intensityValue = emotions.intensity || emotionData.intensity || emotions.confidence || emotionData.confidence || 0.5;
+
+        if (primaryEmotion) {
+            sortedEmotions = [{ emotion: primaryEmotion, value: intensityValue }];
+        }
+    }
+
     console.log('[감정 분석] 정렬된 감정:', sortedEmotions);
     
     if (sortedEmotions.length === 0) {
