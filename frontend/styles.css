@@ -2041,11 +2041,7 @@ body > .loading-overlay:not(.chat-container .loading-overlay) {
 
 /* TTS OFF 상태 */
 .tts-toggle-checkbox:not(:checked) ~ .tts-toggle-icon {
-    opacity: 0.4;
-}
-
-.tts-toggle-checkbox:not(:checked) ~ .tts-toggle-icon::after {
-    content: '🔇';
+    opacity: 0.5;
 }
 
 .tts-toggle-checkbox:not(:checked) ~ .tts-toggle-text {
