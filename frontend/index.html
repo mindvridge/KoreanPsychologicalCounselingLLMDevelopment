@@ -297,6 +297,28 @@
                                         <p class="no-data">대화를 시작하면 감정 분석이 표시됩니다.</p>
                                     </div>
                                 </div>
+
+                                <!-- 감정 타임라인 그래프 -->
+                                <div id="emotion-timeline-container" class="emotion-timeline-section">
+                                    <!-- EmotionTimelineGraph가 여기에 렌더링됨 -->
+                                </div>
+
+                                <!-- 통합 감정 분석 -->
+                                <div class="integrated-emotion-section">
+                                    <h4>📊 통합 분석</h4>
+                                    <div id="integrated-emotion-score" class="integrated-emotion-display">
+                                        <span class="integrated-emoji">😐</span>
+                                        <span class="integrated-label">분석 대기</span>
+                                    </div>
+                                    <div id="emotion-agreement" class="emotion-agreement">
+                                        <!-- 표정-대화 일치도 표시 -->
+                                    </div>
+                                </div>
+
+                                <!-- 지능형 상담 제안 -->
+                                <div id="suggestion-container" class="suggestion-section">
+                                    <!-- SmartCounselingSuggestion이 여기에 렌더링됨 -->
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -612,6 +634,7 @@
     <script src="/static/audio-visualizer.js"></script>
     <script src="/static/voice-app.js"></script>
     <script src="/static/realtime-emotion.js"></script>
+    <script src="/static/advanced-emotion-analysis.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>

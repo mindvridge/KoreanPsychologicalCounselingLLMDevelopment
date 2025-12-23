@@ -491,10 +491,24 @@ function initializeRealtimeEmotion() {
                     apiBaseUrl: CONFIG.API_BASE_URL || 'http://localhost:8000',
                     autoStart: true // 자동 시작 활성화
                 });
-                
+
+                // 웹캠 감정 데이터를 고급 감정 분석 매니저에 연결
+                emotionUI.onEmotionDetected = (result) => {
+                    if (window.advancedEmotionManager && result) {
+                        window.advancedEmotionManager.updateWebcamEmotion({
+                            primaryEmotion: result.primaryEmotion,
+                            confidence: result.confidence,
+                            valence: result.valence,
+                            arousal: result.arousal,
+                            engagement: result.engagement,
+                            emotions: result.emotions || {}
+                        });
+                    }
+                };
+
                 // 전역 변수로 저장하여 다른 곳에서 접근 가능하도록
                 window.realtimeEmotionUI = emotionUI;
-                
+
                 console.log('✅ 실시간 감정 분석 UI 초기화 완료');
             } else {
                 console.warn('⚠️ realtime-emotion-widget 요소를 찾을 수 없습니다.');
@@ -1153,7 +1167,17 @@ function updateChatEmotionSidebar(message, emotions) {
     
     // 감정 분포 바 업데이트
     updateChatEmotionBars(emotions);
-    
+
+    // 고급 감정 분석 매니저에 텍스트 감정 업데이트
+    if (window.advancedEmotionManager) {
+        window.advancedEmotionManager.updateTextEmotion({
+            primaryEmotion: primaryEmotion,
+            confidence: confidence,
+            emotions: emotions.emotions || {},
+            intensity: emotions.intensity || confidence
+        });
+    }
+
     // 히스토리에 추가
     chatEmotionHistory.push({
         emotion: primaryEmotion,
@@ -1545,6 +1569,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize screens
     initializeHomeScreen();
+
+    // 고급 감정 분석 매니저 초기화
+    if (typeof AdvancedEmotionManager !== 'undefined') {
+        window.advancedEmotionManager = new AdvancedEmotionManager({
+            timelineContainerId: 'emotion-timeline-container',
+            suggestionContainerId: 'suggestion-container',
+            enableTimeline: true,
+            enableSuggestions: true
+        });
+        console.log('✅ 고급 감정 분석 매니저 초기화 완료');
+    }
 
     // User menu button - 대시보드로 이동
     const userMenuBtn = document.getElementById('user-menu-btn');
