@@ -2006,7 +2006,7 @@ body > .loading-overlay:not(.chat-container .loading-overlay) {
     border-top: 1px solid var(--border);
 }
 
-/* TTS 토글 스타일 */
+/* TTS 토글 스타일 - 아이콘 기반 */
 .tts-toggle-container {
     display: flex;
     align-items: center;
@@ -2015,48 +2015,79 @@ body > .loading-overlay:not(.chat-container .loading-overlay) {
 .tts-toggle-label {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     cursor: pointer;
     user-select: none;
+    padding: 6px 10px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    transition: all 0.2s;
+}
+
+.tts-toggle-label:hover {
+    background: var(--bg);
+    border-color: var(--primary);
 }
 
 .tts-toggle-checkbox {
-    position: relative;
-    width: 44px;
-    height: 24px;
-    appearance: none;
-    background: #ccc;
-    border-radius: 12px;
-    outline: none;
-    transition: background 0.3s;
-    cursor: pointer;
+    display: none;
 }
 
-.tts-toggle-checkbox:checked {
+.tts-toggle-icon {
+    font-size: 1.1rem;
+    transition: all 0.2s;
+}
+
+/* TTS OFF 상태 */
+.tts-toggle-checkbox:not(:checked) ~ .tts-toggle-icon {
+    opacity: 0.4;
+}
+
+.tts-toggle-checkbox:not(:checked) ~ .tts-toggle-icon::after {
+    content: '🔇';
+}
+
+.tts-toggle-checkbox:not(:checked) ~ .tts-toggle-text {
+    color: var(--text-light);
+}
+
+.tts-toggle-checkbox:not(:checked) ~ .tts-toggle-status {
+    display: none;
+}
+
+/* TTS ON 상태 */
+.tts-toggle-checkbox:checked ~ .tts-toggle-icon {
+    opacity: 1;
+}
+
+.tts-toggle-checkbox:checked ~ .tts-toggle-text {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.tts-toggle-checkbox:checked ~ .tts-toggle-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
     background: var(--primary);
-}
-
-.tts-toggle-slider {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 20px;
-    height: 20px;
-    background: white;
+    color: white;
     border-radius: 50%;
-    transition: transform 0.3s;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    pointer-events: none;
-}
-
-.tts-toggle-checkbox:checked + .tts-toggle-slider {
-    transform: translateX(20px);
+    font-size: 0.7rem;
+    font-weight: bold;
 }
 
 .tts-toggle-text {
     font-size: 0.85rem;
     color: var(--text);
     font-weight: 500;
+    transition: all 0.2s;
+}
+
+.tts-toggle-status {
+    transition: all 0.2s;
 }
 
 .chat-tts-label {

@@ -393,17 +393,28 @@ function initializeChatScreen(sessionId = null) {
     // TTS 토글 초기화
     const ttsToggle = document.getElementById('tts-toggle');
     if (ttsToggle) {
+        // TTS 아이콘 업데이트 함수
+        const updateTtsIcon = (enabled) => {
+            const icon = document.querySelector('.tts-toggle-icon');
+            if (icon) {
+                icon.textContent = enabled ? '🔊' : '🔇';
+            }
+        };
+
         // 로컬 스토리지에서 TTS 상태 불러오기
         const savedTtsState = localStorage.getItem('tts_enabled');
         if (savedTtsState !== null) {
             AppState.ttsEnabled = savedTtsState === 'true';
             ttsToggle.checked = AppState.ttsEnabled;
         }
-        
+        // 초기 아이콘 상태 설정
+        updateTtsIcon(AppState.ttsEnabled);
+
         // TTS 토글 이벤트 리스너
         ttsToggle.addEventListener('change', (e) => {
             AppState.ttsEnabled = e.target.checked;
             localStorage.setItem('tts_enabled', AppState.ttsEnabled.toString());
+            updateTtsIcon(AppState.ttsEnabled);
             console.log('[TTS] 상태 변경:', AppState.ttsEnabled ? 'ON' : 'OFF');
         });
     }
