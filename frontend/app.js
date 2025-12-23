@@ -1201,8 +1201,15 @@ function updateChatEmotionBars(emotions) {
     }
     
     // 감정을 확률 순으로 정렬
+    // 메타데이터 키 필터링 (감정이 아닌 필드들 제외)
+    const nonEmotionKeys = ['intensity', 'confidence', 'confidence_score', 'timestamp', 'primary_emotion', 'valence', 'arousal', 'engagement'];
+
     const sortedEmotions = Object.entries(emotionData)
-        .filter(([emotion, value]) => typeof value === 'number' && value > 0)
+        .filter(([emotion, value]) =>
+            typeof value === 'number' &&
+            value > 0 &&
+            !nonEmotionKeys.includes(emotion.toLowerCase())
+        )
         .map(([emotion, value]) => ({ emotion, value }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 5); // 상위 5개만 표시

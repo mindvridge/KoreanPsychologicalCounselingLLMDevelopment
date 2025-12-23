@@ -634,16 +634,20 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: var(--space-sm);
+    gap: var(--space-xs);
+    flex-wrap: nowrap;
+    overflow: visible;
 }
 
 .metric-label {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--text);
     font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
+    flex-shrink: 1;
+    min-width: 0;
 }
 
 .metric-bar {
@@ -677,11 +681,13 @@
 }
 
 .metric-value {
-    font-size: 0.9rem;
+    font-size: 0.75rem;
     color: var(--primary);
     font-weight: 700;
     text-align: right;
     white-space: nowrap;
+    flex-shrink: 0;
+    min-width: fit-content;
 }
 
 .metric-description {
