@@ -419,16 +419,67 @@ class EmotionChartManager {
             '중립': '😐'
         };
 
-        container.innerHTML = data.slice(0, 5).map(emotion => `
+        container.innerHTML = data.slice(0, 5).map(emotion => {
+            // intensity 정규화: 다양한 범위를 0-1로 변환
+            let intensity = emotion.intensity || 0;
+            
+            // intensity가 1보다 큰 경우 정규화
+            if (intensity > 1.0) {
+                // 1-10 범위인 경우
+                if (intensity <= 10.0) {
+                    intensity = intensity / 10.0;
+                }
+                // 10-100 범위인 경우
+                else if (intensity <= 100.0) {
+                    intensity = intensity / 100.0;
+                }
+                // 100보다 큰 경우 (예: 500)는 100으로 나눔
+                else {
+                    intensity = intensity / 100.0;
+                    // 만약 여전히 1보다 크면 1로 제한
+                    if (intensity > 1.0) {
+                        intensity = 1.0;
+                    }
+                }
+            }
+            
+            // 최종적으로 0-1 범위로 제한
+            intensity = Math.min(1.0, Math.max(0.0, intensity));
+            
+            // confidence도 정규화 (있는 경우)
+            let confidence = emotion.confidence || 0;
+            if (confidence > 1.0) {
+                if (confidence <= 10.0) {
+                    confidence = confidence / 10.0;
+                } else if (confidence <= 100.0) {
+                    confidence = confidence / 100.0;
+                } else {
+                    confidence = confidence / 100.0;
+                    if (confidence > 1.0) {
+                        confidence = 1.0;
+                    }
+                }
+            }
+            confidence = Math.min(1.0, Math.max(0.0, confidence));
+            
+            const intensityPercent = Math.round(intensity * 100);
+            const confidencePercent = Math.round(confidence * 100);
+            
+            return `
             <div class="emotion-item">
                 <span class="emotion-emoji">${emotionEmojis[emotion.primary_emotion] || '😐'}</span>
                 <div class="emotion-details">
                     <span class="emotion-name">${emotion.primary_emotion}</span>
                     <span class="emotion-time">${this.formatTime(emotion.timestamp)}</span>
+                    <div class="emotion-metrics">
+                        <span class="emotion-intensity-label">강도 (intensity): ${intensityPercent}%</span>
+                        ${confidence > 0 ? `<span class="emotion-confidence-label">신뢰도 (confidence): ${confidencePercent}%</span>` : ''}
+                    </div>
                 </div>
-                <div class="emotion-intensity" style="width: ${emotion.intensity * 100}%"></div>
+                <div class="emotion-intensity" style="width: ${intensity * 100}%"></div>
             </div>
-        `).join('');
+        `;
+        }).join('');
     }
 
     // =========================================================================

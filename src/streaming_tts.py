@@ -152,16 +152,36 @@ class StreamingTTS:
 
     def _load_engine(self):
         """TTS 엔진 로드"""
-        try:
-            # Zonos TTS 시도
-            from src.tts import ZonosTTS
-            self._engine = ZonosTTS(device=self.device)
-            logger.info("Zonos TTS 엔진 로드 완료")
+        # TTS 엔진 선택 (환경 변수 또는 설정에서)
+        import os
+        tts_engine_type = os.getenv("TTS_ENGINE", "zonos")  # 기본값: zonos
+        
+        if tts_engine_type == "elevenlabs":
+            try:
+                from src.elevenlabs_tts import ElevenLabsTTS, ElevenLabsConfig
+                api_key = os.getenv("ELEVENLABS_API_KEY")
+                if api_key:
+                    config = ElevenLabsConfig(api_key=api_key)
+                    self._engine = ElevenLabsTTS(config)
+                    logger.info("ElevenLabs TTS 엔진 로드 완료 (스트리밍 지원)")
+                else:
+                    logger.warning("ElevenLabs API 키가 없어 Zonos TTS로 폴백")
+                    tts_engine_type = "zonos"
+            except Exception as e:
+                logger.warning(f"ElevenLabs TTS 로드 실패, Zonos로 폴백: {e}")
+                tts_engine_type = "zonos"
+        
+        if tts_engine_type == "zonos":
+            try:
+                # Zonos TTS 시도
+                from src.tts import ZonosTTS
+                self._engine = ZonosTTS(device=self.device)
+                logger.info("Zonos TTS 엔진 로드 완료")
 
-        except Exception as e:
-            logger.warning(f"Zonos TTS 로드 실패, gTTS 사용: {e}")
-            # Fallback to gTTS (online)
-            self._engine = None
+            except Exception as e:
+                logger.warning(f"Zonos TTS 로드 실패, gTTS 사용: {e}")
+                # Fallback to gTTS (online)
+                self._engine = None
 
     async def synthesize_stream(
         self,
@@ -259,6 +279,41 @@ class StreamingTTS:
             if self.engine is None:
                 # Fallback: gTTS 사용
                 return await self._synthesize_gtts(sentence)
+
+            # ElevenLabs TTS인 경우 스트리밍 지원
+            if hasattr(self.engine, 'synthesize_stream'):
+                # ElevenLabs 스트리밍 사용
+                loop = asyncio.get_event_loop()
+                audio_chunks = []
+                
+                def collect_stream():
+                    nonlocal audio_chunks
+                    try:
+                        for chunk in self.engine.synthesize_stream(sentence, emotion=emotion):
+                            audio_chunks.append(chunk)
+                    except Exception as e:
+                        logger.error(f"ElevenLabs 스트리밍 오류: {e}")
+                        raise
+                
+                await loop.run_in_executor(None, collect_stream)
+                
+                # 모든 청크를 합치기
+                if audio_chunks:
+                    import soundfile as sf
+                    import librosa
+                    all_audio = b''.join(audio_chunks)
+                    audio_data, sample_rate = sf.read(io.BytesIO(all_audio))
+                    
+                    # 샘플 레이트 변환 (필요한 경우)
+                    if sample_rate != 44100:
+                        audio_data = librosa.resample(
+                            audio_data,
+                            orig_sr=sample_rate,
+                            target_sr=44100
+                        )
+                    
+                    return audio_data.astype(np.float32)
+                return None
 
             # Zonos TTS 사용
             loop = asyncio.get_event_loop()

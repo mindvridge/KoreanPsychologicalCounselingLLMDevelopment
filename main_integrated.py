@@ -189,8 +189,8 @@ class IntegratedMentalHealthSystem:
                 embedding_model=rag_config.get("embedding_model", "jhgan/ko-sroberta-multitask")
             )
             logger.info("   Indexing knowledge base...")
-            self.rag_system.index_documents()
-            logger.info(f"✓ RAG system initialized with {len(self.rag_system.doc_processor.documents)} documents")
+            self.rag_system.index_knowledge_base()
+            logger.info(f"✓ RAG system initialized")
         except Exception as e:
             logger.error(f"✗ RAG initialization failed: {e}")
             self.initialization_errors.append(("rag", str(e)))

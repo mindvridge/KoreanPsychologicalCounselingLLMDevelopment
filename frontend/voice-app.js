@@ -278,7 +278,7 @@ class VoiceApp {
             avatar.textContent = '🤖';
         }
         if (name) {
-            name.textContent = '마음챗 AI 상담';
+            name.textContent = '마브AI 상담';
         }
         if (speakingAvatar) {
             speakingAvatar.textContent = '🤖';

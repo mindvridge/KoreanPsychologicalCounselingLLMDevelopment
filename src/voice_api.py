@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -100,8 +101,18 @@ async def get_pipeline():
     global _pipeline
 
     if _pipeline is None:
-        from voice_streaming import VoiceStreamingPipeline
-        _pipeline = VoiceStreamingPipeline()
+        from src.voice_streaming import VoiceStreamingPipeline
+        # LLM 엔진은 선택적 (없어도 STT/TTS만으로 동작 가능)
+        llm_engine = None
+        try:
+            # main_integrated에서 LLM 가져오기 시도
+            from main_integrated import mental_health_system
+            if mental_health_system and hasattr(mental_health_system, 'llm') and mental_health_system.llm:
+                llm_engine = mental_health_system.llm
+        except Exception as e:
+            logger.debug(f"Could not get LLM engine: {e}")
+        
+        _pipeline = VoiceStreamingPipeline(llm_engine=llm_engine)
         await _pipeline.initialize()
 
     return _pipeline
@@ -114,7 +125,7 @@ async def get_or_create_session(session_id: Optional[str], mode: str = "hybrid")
     if session_id and session_id in _sessions:
         return _sessions[session_id]
 
-    from voice_streaming import UnifiedCounselingSession, CounselingSessionConfig, VoiceCounselingMode
+    from src.voice_streaming import UnifiedCounselingSession, CounselingSessionConfig, VoiceCounselingMode
 
     config = CounselingSessionConfig(mode=VoiceCounselingMode(mode))
     session = UnifiedCounselingSession(config, await get_pipeline())
@@ -304,32 +315,201 @@ async def stt_endpoint(
 async def tts_endpoint(
     text: str = Form(..., description="합성할 텍스트"),
     voice_profile: Optional[str] = Form(None, description="음성 프로필"),
-    emotion: str = Form("calm", description="감정 (calm, empathetic, supportive)")
+    emotion: str = Form("calm", description="감정 (calm, empathetic, supportive)"),
+    tts_engine: str = Form("zonos", description="TTS 엔진 (zonos, elevenlabs)"),
+    stream: str = Form("false", description="스트리밍 모드 (ElevenLabs만 지원, 'true' 또는 'false')")
 ):
     """
     TTS 전용 API
 
     텍스트를 음성으로만 변환 (상담 없이)
+    
+    Args:
+        text: 합성할 텍스트
+        voice_profile: 음성 프로필 (Zonos용) 또는 보이스 ID (ElevenLabs용)
+        emotion: 감정
+        tts_engine: TTS 엔진 선택 (zonos 또는 elevenlabs)
+        stream: 스트리밍 모드 활성화 (ElevenLabs만 지원, 기본값: False)
+    
+    Returns:
+        stream=True인 경우: StreamingResponse (오디오/WAV 스트림)
+        stream=False인 경우: JSON 응답 (audio_base64 포함)
     """
     try:
-        pipeline = await get_pipeline()
+        # stream 파라미터를 boolean으로 변환 (FormData는 문자열로 전송됨)
+        use_streaming = stream.lower() == "true" if isinstance(stream, str) else bool(stream)
+        
+        logger.info(f"[TTS] 요청 받음: engine={tts_engine}, stream={use_streaming}, text_length={len(text)}")
+        
+        if tts_engine == "elevenlabs":
+            # ElevenLabs TTS 사용
+            try:
+                from src.elevenlabs_tts import ElevenLabsTTS, ElevenLabsConfig, HAS_ELEVENLABS
+                import os
+                
+                # ElevenLabs 패키지 설치 여부 확인
+                if not HAS_ELEVENLABS:
+                    logger.error("[TTS] ElevenLabs 패키지가 설치되지 않음")
+                    raise HTTPException(
+                        status_code=400,
+                        detail="ElevenLabs 패키지가 설치되지 않았습니다. pip install elevenlabs로 설치하세요."
+                    )
+                
+                api_key = os.getenv("ELEVENLABS_API_KEY")
+                if not api_key:
+                    logger.error("[TTS] ElevenLabs API 키가 설정되지 않음")
+                    raise HTTPException(
+                        status_code=400,
+                        detail="ElevenLabs API 키가 설정되지 않았습니다. ELEVENLABS_API_KEY 환경 변수를 설정하세요."
+                    )
+                
+                logger.info(f"[TTS] ElevenLabs API 키 확인됨 (길이: {len(api_key)})")
+                
+                # 환경 변수에서 보이스 ID 가져오기 (없으면 기본값 사용)
+                default_voice_id = os.getenv("ELEVENLABS_VOICE_ID", "zsAH1WNcfG4gUQ2NIDnd")
+                
+                # voice_profile이 None, 빈 문자열, 또는 Zonos 전용 프로필인 경우 기본 보이스 ID 사용
+                # ElevenLabs 보이스 ID는 보통 20자 이상의 문자열이므로, 짧은 문자열은 Zonos 프로필로 간주
+                if voice_profile and len(voice_profile) > 15 and voice_profile not in ["default_counselor", "calm_counselor", "empathetic_counselor"]:
+                    selected_voice_id = voice_profile
+                else:
+                    selected_voice_id = default_voice_id
+                
+                logger.info(f"[TTS] 보이스 ID: {selected_voice_id}, 스트리밍: {use_streaming}")
+                
+                config = ElevenLabsConfig(api_key=api_key, voice_id=selected_voice_id)
+                elevenlabs_tts = ElevenLabsTTS(config)
+                logger.info("[TTS] ElevenLabsTTS 인스턴스 생성 완료")
+                
+                # 스트리밍 모드
+                if use_streaming:
+                    async def generate_audio_stream():
+                        """오디오 스트림 생성"""
+                        try:
+                            # 스트리밍 합성 (동기 함수를 비동기로 실행)
+                            def stream_synthesis():
+                                for chunk in elevenlabs_tts.synthesize_stream(
+                                    text,
+                                    voice_id=selected_voice_id,
+                                    emotion=emotion
+                                ):
+                                    yield chunk
+                            
+                            # 동기 제너레이터를 비동기로 변환
+                            loop = asyncio.get_event_loop()
+                            sync_stream = stream_synthesis()
+                            
+                            while True:
+                                try:
+                                    chunk = await loop.run_in_executor(
+                                        None,
+                                        lambda: next(sync_stream, None)
+                                    )
+                                    if chunk is None:
+                                        break
+                                    yield chunk
+                                except StopIteration:
+                                    break
+                                    
+                        except Exception as e:
+                            logger.error(f"스트리밍 오류: {e}")
+                            raise
+                    
+                    # WAV 스트리밍 응답
+                    return StreamingResponse(
+                        generate_audio_stream(),
+                        media_type="audio/wav",
+                        headers={
+                            "Content-Disposition": f'attachment; filename="tts_stream.wav"',
+                            "X-Engine": "elevenlabs",
+                            "X-Streaming": "true"
+                        }
+                    )
+                
+                # 비스트리밍 모드 (기존 방식)
+                logger.info(f"[TTS] ElevenLabs 합성 시작: text_length={len(text)}, voice_id={selected_voice_id}")
+                try:
+                    audio_data = await asyncio.to_thread(
+                        elevenlabs_tts.synthesize,
+                        text,
+                        voice_id=selected_voice_id,
+                        emotion=emotion
+                    )
+                    logger.info(f"[TTS] ElevenLabs 합성 완료: audio_shape={audio_data.shape if hasattr(audio_data, 'shape') else 'unknown'}")
+                except Exception as synth_error:
+                    logger.error(f"[TTS] ElevenLabs 합성 실패: {synth_error}", exc_info=True)
+                    raise
+                
+                # numpy array를 bytes로 변환
+                import soundfile as sf
+                import io
+                try:
+                    buffer = io.BytesIO()
+                    sf.write(buffer, audio_data, config.sample_rate, format="wav")
+                    buffer.seek(0)
+                    audio_bytes = buffer.read()
+                    logger.info(f"[TTS] 오디오 변환 완료: {len(audio_bytes)} bytes")
+                except Exception as convert_error:
+                    logger.error(f"[TTS] 오디오 변환 실패: {convert_error}", exc_info=True)
+                    raise
+                
+                # duration 계산
+                duration = len(audio_data) / config.sample_rate
+                
+                result = {
+                    "audio_base64": base64.b64encode(audio_bytes).decode(),
+                    "duration": duration,
+                    "sample_rate": config.sample_rate,
+                    "text": text,
+                    "engine": "elevenlabs",
+                    "streaming": False
+                }
+                logger.info(f"[TTS] 응답 준비 완료: duration={duration:.2f}s, audio_base64_length={len(result['audio_base64'])}")
+                return result
+                
+            except ImportError as import_error:
+                logger.error(f"[TTS] ElevenLabs 패키지 import 실패: {import_error}", exc_info=True)
+                raise HTTPException(
+                    status_code=400,
+                    detail="ElevenLabs 패키지가 설치되지 않았습니다. pip install elevenlabs로 설치하세요."
+                )
+            except HTTPException:
+                # HTTPException은 그대로 재발생
+                raise
+            except Exception as e:
+                logger.error(f"[TTS] ElevenLabs TTS 오류: {e}", exc_info=True)
+                import traceback
+                logger.error(f"[TTS] 오류 상세:\n{traceback.format_exc()}")
+                raise HTTPException(status_code=500, detail=f"ElevenLabs TTS 오류: {str(e)}")
+        else:
+            # Zonos TTS는 스트리밍 미지원
+            if use_streaming:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Zonos TTS는 스트리밍 모드를 지원하지 않습니다. ElevenLabs를 사용하세요."
+                )
+            
+            # 기본 Zonos TTS 사용
+            pipeline = await get_pipeline()
 
-        from tts import SpeechConfig
-        config = SpeechConfig(emotion=emotion)
+            from tts import SpeechConfig
+            config = SpeechConfig(emotion=emotion)
 
-        result = await asyncio.to_thread(
-            pipeline.tts.synthesize,
-            text,
-            voice_profile,
-            config
-        )
+            result = await asyncio.to_thread(
+                pipeline.tts.synthesize,
+                text,
+                voice_profile,
+                config
+            )
 
-        return {
-            "audio_base64": base64.b64encode(result.to_bytes()).decode(),
-            "duration": result.duration,
-            "sample_rate": result.sample_rate,
-            "text": text
-        }
+            return {
+                "audio_base64": base64.b64encode(result.to_bytes()).decode(),
+                "duration": result.duration,
+                "sample_rate": result.sample_rate,
+                "text": text,
+                "engine": "zonos",
+                "streaming": False
+            }
 
     except Exception as e:
         logger.error(f"TTS error: {e}")
@@ -404,7 +584,7 @@ async def websocket_voice_endpoint(websocket: WebSocket, session_id: Optional[st
     try:
         pipeline = await get_pipeline()
 
-        from voice_streaming import WebSocketVoiceHandler
+        from src.voice_streaming import WebSocketVoiceHandler
         handler = WebSocketVoiceHandler(pipeline)
 
         await handler.handle_connection(websocket, session_id)

@@ -112,7 +112,14 @@ class EmotionAnalyzer {
     constructor() {
         this.isModelLoaded = false;
         this.useAPI = true; // API 사용 여부 (클라이언트 모델 대신)
-        this.apiEndpoint = '/api/analyze-emotion';
+        // 기본 API 엔드포인트 설정 (절대 URL 사용)
+        const baseUrl = window.location.origin || 'http://localhost:8000';
+        this.apiEndpoint = `${baseUrl}/api/emotion/analyze`;
+        this.sessionId = null;
+    }
+    
+    setSessionId(sessionId) {
+        this.sessionId = sessionId;
     }
 
     async initialize() {
@@ -152,6 +159,14 @@ class EmotionAnalyzer {
 
     async analyzeViaAPI(imageBase64) {
         try {
+            // API 엔드포인트 확인
+            if (!this.apiEndpoint) {
+                console.error('API 엔드포인트가 설정되지 않았습니다.');
+                throw new Error('API 엔드포인트가 설정되지 않았습니다.');
+            }
+            
+            console.log('감정 분석 API 요청:', this.apiEndpoint);
+            
             const response = await fetch(this.apiEndpoint, {
                 method: 'POST',
                 headers: {
@@ -159,18 +174,64 @@ class EmotionAnalyzer {
                 },
                 body: JSON.stringify({
                     image: imageBase64,
+                    session_id: this.sessionId || 'default',
                     timestamp: Date.now()
                 })
             });
 
             if (!response.ok) {
-                throw new Error('API 요청 실패');
+                const errorText = await response.text();
+                let errorData = {};
+                try {
+                    errorData = JSON.parse(errorText);
+                } catch (e) {
+                    errorData = { detail: errorText || `HTTP ${response.status}` };
+                }
+                console.error('API 오류 응답:', response.status, errorData);
+                throw new Error(errorData.detail || `API 요청 실패 (${response.status})`);
             }
 
-            return await response.json();
+            const data = await response.json();
+            console.log('API 응답 데이터:', data);
+            
+            // API 응답 형식에 맞게 변환
+            // 백엔드 EmotionResponse 모델: success, face_detected, primary_emotion, confidence, emotions, valence, arousal, engagement
+            const result = {
+                success: data.success !== undefined ? data.success : true,
+                faceDetected: data.face_detected !== undefined ? data.face_detected : false,
+                primaryEmotion: data.primary_emotion || 'neutral',
+                confidence: data.confidence || 0,
+                emotions: data.emotions || {},
+                valence: data.valence !== undefined ? data.valence : 0,
+                arousal: data.arousal !== undefined ? data.arousal : 0,
+                engagement: data.engagement !== undefined ? data.engagement : 0,
+                counselingContext: data.counseling_context || '',
+                timestamp: data.timestamp || Date.now()
+            };
+            
+            console.log('변환된 결과:', {
+                success: result.success,
+                faceDetected: result.faceDetected,
+                primaryEmotion: result.primaryEmotion,
+                confidence: result.confidence,
+                emotionsCount: Object.keys(result.emotions).length
+            });
+            
+            return result;
         } catch (error) {
-            // API 실패 시 시뮬레이션 데이터 반환 (데모용)
-            return this.generateSimulatedAnalysis();
+            console.error('감정 분석 API 오류:', error);
+            // API 실패 시 얼굴 미감지 상태 반환
+            return {
+                success: false,
+                faceDetected: false,
+                primaryEmotion: 'neutral',
+                confidence: 0,
+                emotions: {},
+                valence: 0,
+                arousal: 0,
+                engagement: 0,
+                timestamp: Date.now()
+            };
         }
     }
 
@@ -232,10 +293,42 @@ class EmotionAnalyzer {
 // ============================================================================
 
 class RealtimeEmotionUI {
-    constructor(containerId) {
+    constructor(containerId, options = {}) {
         this.container = document.getElementById(containerId);
+        
+        if (!this.container) {
+            console.error(`RealtimeEmotionUI: 컨테이너를 찾을 수 없습니다. ID: ${containerId}`);
+            return;
+        }
+        
         this.webcamManager = new WebcamManager();
         this.emotionAnalyzer = new EmotionAnalyzer();
+        
+        // 옵션에서 세션 ID 및 API URL 설정
+        if (options.sessionId) {
+            this.emotionAnalyzer.setSessionId(options.sessionId);
+        }
+        if (options.apiBaseUrl) {
+            // apiBaseUrl이 이미 /api/v1을 포함하고 있으므로, 기본 URL만 추출
+            // 예: http://localhost:8000/api/v1 -> http://localhost:8000
+            let baseUrl = options.apiBaseUrl;
+            if (baseUrl.includes('/api/v1')) {
+                baseUrl = baseUrl.replace('/api/v1', '').replace(/\/$/, '');
+            }
+            // /api/emotion/analyze 경로 추가 (emotion_api.py의 router prefix가 /api/emotion이므로)
+            this.emotionAnalyzer.apiEndpoint = `${baseUrl}/api/emotion/analyze`;
+            console.log('감정 분석 API 엔드포인트:', this.emotionAnalyzer.apiEndpoint);
+        } else {
+            // apiBaseUrl이 없으면 CONFIG에서 가져오기
+            if (typeof CONFIG !== 'undefined' && CONFIG.API_BASE_URL) {
+                let baseUrl = CONFIG.API_BASE_URL;
+                if (baseUrl.includes('/api/v1')) {
+                    baseUrl = baseUrl.replace('/api/v1', '').replace(/\/$/, '');
+                }
+                this.emotionAnalyzer.apiEndpoint = `${baseUrl}/api/emotion/analyze`;
+                console.log('감정 분석 API 엔드포인트 (CONFIG):', this.emotionAnalyzer.apiEndpoint);
+            }
+        }
 
         this.isRunning = false;
         this.analysisTimer = null;
@@ -247,6 +340,16 @@ class RealtimeEmotionUI {
         this.onAlertTriggered = null;
 
         this.init();
+        
+        // 자동 시작 옵션 (options에서 가져오거나 기본값 true)
+        if (options.autoStart !== false) {
+            // 렌더링 완료 후 자동 시작
+            setTimeout(() => {
+                this.startAnalysis().catch(err => {
+                    console.warn('자동 시작 실패:', err);
+                });
+            }, 500);
+        }
     }
 
     init() {
@@ -255,6 +358,11 @@ class RealtimeEmotionUI {
     }
 
     render() {
+        if (!this.container) {
+            console.error('RealtimeEmotionUI: 컨테이너가 없어 렌더링할 수 없습니다.');
+            return;
+        }
+        
         this.container.innerHTML = `
             <div class="realtime-emotion-widget">
                 <!-- 헤더 -->
@@ -268,7 +376,6 @@ class RealtimeEmotionUI {
                             <input type="checkbox" id="emotion-privacy-mode">
                             <span>프라이버시 모드</span>
                         </label>
-                        <button class="emotion-settings-btn" id="emotion-settings-btn">⚙️</button>
                     </div>
                 </div>
 
@@ -278,9 +385,9 @@ class RealtimeEmotionUI {
                     <h4>웹캠 감정 분석</h4>
                     <p>상담 중 표정을 분석하여 더 나은 상담을 제공합니다.</p>
                     <ul class="consent-features">
-                        <li>✓ 실시간 감정 인식</li>
-                        <li>✓ 상담사 AI가 감정에 맞춰 응답</li>
-                        <li>✓ 영상은 저장되지 않습니다</li>
+                        <li>실시간 감정 인식</li>
+                        <li>상담사 AI가 감정에 맞춰 응답</li>
+                        <li>영상은 저장되지 않습니다</li>
                     </ul>
                     <div class="consent-buttons">
                         <button class="consent-btn consent-btn-allow" id="consent-allow">
@@ -294,60 +401,73 @@ class RealtimeEmotionUI {
 
                 <!-- 메인 분석 화면 -->
                 <div class="emotion-main hidden" id="emotion-main">
-                    <!-- 비디오 영역 -->
-                    <div class="emotion-video-container">
-                        <video id="emotion-video" autoplay muted playsinline></video>
-                        <canvas id="emotion-canvas" class="hidden"></canvas>
+                    <!-- 첫 번째 줄: 웹캠 + 감정 분포 -->
+                    <div class="emotion-main-row-1">
+                        <!-- 비디오 영역 -->
+                        <div class="emotion-video-container">
+                            <video id="emotion-video" autoplay muted playsinline></video>
+                            <canvas id="emotion-canvas" class="hidden"></canvas>
 
-                        <!-- 얼굴 감지 오버레이 -->
-                        <div class="face-detection-overlay" id="face-overlay">
-                            <div class="face-box"></div>
+                            <!-- 얼굴 감지 오버레이 -->
+                            <div class="face-detection-overlay" id="face-overlay">
+                                <div class="face-box"></div>
+                            </div>
+
+                            <!-- 현재 감정 뱃지 -->
+                            <div class="current-emotion-badge" id="current-emotion-badge">
+                                <span class="emotion-emoji">😐</span>
+                                <span class="emotion-label">분석 중...</span>
+                                <span class="emotion-confidence"></span>
+                            </div>
+
+                            <!-- 프라이버시 모드 오버레이 -->
+                            <div class="privacy-overlay hidden" id="privacy-overlay">
+                                <span>🔒</span>
+                                <span>프라이버시 모드</span>
+                            </div>
                         </div>
 
-                        <!-- 현재 감정 뱃지 -->
-                        <div class="current-emotion-badge" id="current-emotion-badge">
-                            <span class="emotion-emoji">😐</span>
-                            <span class="emotion-label">분석 중...</span>
-                        </div>
-
-                        <!-- 프라이버시 모드 오버레이 -->
-                        <div class="privacy-overlay hidden" id="privacy-overlay">
-                            <span>🔒</span>
-                            <span>프라이버시 모드</span>
+                        <!-- 감정 분포 차트 -->
+                        <div class="emotion-distribution">
+                            <h4>감정 분포</h4>
+                            <div class="emotion-bars" id="emotion-bars">
+                                ${this.renderEmotionBars()}
+                            </div>
                         </div>
                     </div>
 
-                    <!-- 감정 분포 차트 -->
-                    <div class="emotion-distribution">
-                        <h4>감정 분포</h4>
-                        <div class="emotion-bars" id="emotion-bars">
-                            ${this.renderEmotionBars()}
-                        </div>
-                    </div>
-
-                    <!-- 감정 지표 -->
-                    <div class="emotion-metrics">
-                        <div class="metric-item">
-                            <span class="metric-label">감정가 (Valence)</span>
+                    <!-- 감정 지표 (오른쪽 세로 배치) -->
+                    <div class="emotion-main-row-2">
+                        <div class="emotion-metrics">
+                        <div class="metric-item" title="감정의 긍정/부정 정도 (Valence)">
+                            <div class="metric-header">
+                                <span class="metric-label">감정가</span>
+                                <span class="metric-value" id="valence-value">중립</span>
+                            </div>
                             <div class="metric-bar valence-bar">
                                 <div class="metric-indicator" id="valence-indicator"></div>
                                 <span class="metric-negative">부정</span>
                                 <span class="metric-positive">긍정</span>
                             </div>
                         </div>
-                        <div class="metric-item">
-                            <span class="metric-label">각성도 (Arousal)</span>
+                        <div class="metric-item" title="감정의 활성화 정도 (Arousal)">
+                            <div class="metric-header">
+                                <span class="metric-label">각성도</span>
+                                <span class="metric-value" id="arousal-value">0%</span>
+                            </div>
                             <div class="metric-bar arousal-bar">
                                 <div class="metric-fill" id="arousal-fill"></div>
                             </div>
-                            <span class="metric-value" id="arousal-value">50%</span>
                         </div>
-                        <div class="metric-item">
-                            <span class="metric-label">참여도</span>
+                        <div class="metric-item" title="상담에 대한 참여 정도 (Engagement)">
+                            <div class="metric-header">
+                                <span class="metric-label">참여도</span>
+                                <span class="metric-value" id="engagement-value">0%</span>
+                            </div>
                             <div class="metric-bar engagement-bar">
                                 <div class="metric-fill" id="engagement-fill"></div>
                             </div>
-                            <span class="metric-value" id="engagement-value">75%</span>
+                        </div>
                         </div>
                     </div>
 
@@ -363,16 +483,6 @@ class RealtimeEmotionUI {
                     <div class="emotion-insight" id="emotion-insight">
                         <span class="insight-icon">💡</span>
                         <span class="insight-text">감정 분석 중...</span>
-                    </div>
-
-                    <!-- 컨트롤 -->
-                    <div class="emotion-controls">
-                        <button class="emotion-btn emotion-btn-pause" id="emotion-pause">
-                            ⏸️ 일시정지
-                        </button>
-                        <button class="emotion-btn emotion-btn-stop" id="emotion-stop">
-                            ⏹️ 종료
-                        </button>
                     </div>
                 </div>
 
@@ -397,51 +507,112 @@ class RealtimeEmotionUI {
     }
 
     bindEvents() {
-        // 동의 버튼
-        document.getElementById('consent-allow')?.addEventListener('click', () => {
-            this.startAnalysis();
+        // 이벤트 위임을 사용하여 동적으로 생성된 요소에도 이벤트가 작동하도록 함
+        if (!this.container) {
+            console.error('RealtimeEmotionUI: 컨테이너가 없어 이벤트를 바인딩할 수 없습니다.');
+            return;
+        }
+        
+        // 컨테이너에 이벤트 위임
+        this.container.addEventListener('click', (e) => {
+            const target = e.target.closest('button');
+            if (!target) return;
+            
+            if (target.id === 'consent-allow' || target.classList.contains('consent-btn-allow')) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('활성화하기 버튼 클릭됨');
+                this.startAnalysis();
+            } else if (target.id === 'consent-skip' || target.classList.contains('consent-btn-skip')) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('나중에 버튼 클릭됨');
+                this.container.classList.add('minimized');
+            }
         });
-
-        document.getElementById('consent-skip')?.addEventListener('click', () => {
-            this.container.classList.add('minimized');
+        
+        // 프라이버시 모드 (체크박스는 change 이벤트)
+        this.container.addEventListener('change', (e) => {
+            if (e.target.id === 'emotion-privacy-mode') {
+                this.togglePrivacyMode(e.target.checked);
+            }
         });
-
-        // 일시정지/재개
-        document.getElementById('emotion-pause')?.addEventListener('click', () => {
-            this.togglePause();
-        });
-
-        // 종료
-        document.getElementById('emotion-stop')?.addEventListener('click', () => {
-            this.stopAnalysis();
-        });
-
-        // 프라이버시 모드
-        document.getElementById('emotion-privacy-mode')?.addEventListener('change', (e) => {
-            this.togglePrivacyMode(e.target.checked);
-        });
+        
+        // 직접 바인딩도 시도 (이중 보호)
+        setTimeout(() => {
+            const consentAllow = document.getElementById('consent-allow');
+            const consentSkip = document.getElementById('consent-skip');
+            
+            if (consentAllow) {
+                consentAllow.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('활성화하기 버튼 직접 클릭됨');
+                    this.startAnalysis();
+                });
+            }
+            
+            if (consentSkip) {
+                consentSkip.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('나중에 버튼 직접 클릭됨');
+                    this.container.classList.add('minimized');
+                });
+            }
+        }, 100);
     }
 
     async startAnalysis() {
         try {
+            console.log('startAnalysis() 호출됨');
+            
             // 동의 화면 숨기기
-            document.getElementById('emotion-consent').classList.add('hidden');
-            document.getElementById('emotion-main').classList.remove('hidden');
+            const consentElement = document.getElementById('emotion-consent');
+            const mainElement = document.getElementById('emotion-main');
+            
+            if (consentElement) {
+                consentElement.classList.add('hidden');
+                console.log('동의 화면 숨김');
+            } else {
+                console.warn('emotion-consent 요소를 찾을 수 없습니다.');
+            }
+            
+            if (mainElement) {
+                mainElement.classList.remove('hidden');
+                console.log('메인 화면 표시');
+            } else {
+                console.warn('emotion-main 요소를 찾을 수 없습니다.');
+            }
+            
+            // 이미 실행 중이면 중복 실행 방지
+            if (this.isRunning) {
+                console.log('이미 감정 분석이 실행 중입니다.');
+                return;
+            }
 
             // 모델 초기화
+            console.log('감정 분석기 초기화 중...');
             await this.emotionAnalyzer.initialize();
 
             // 웹캠 시작
+            console.log('웹캠 초기화 중...');
             await this.webcamManager.initialize('emotion-video', 'emotion-canvas');
 
             // 분석 루프 시작
             this.isRunning = true;
             this.startAnalysisLoop();
 
-            console.log('실시간 감정 분석 시작');
+            console.log('✅ 실시간 감정 분석 시작 완료');
         } catch (error) {
-            console.error('감정 분석 시작 실패:', error);
+            console.error('❌ 감정 분석 시작 실패:', error);
             this.showError('웹캠을 사용할 수 없습니다. 권한을 확인해주세요.');
+            
+            // 오류 발생 시에도 동의 화면은 숨기고 메인 화면 표시
+            const consentElement = document.getElementById('emotion-consent');
+            const mainElement = document.getElementById('emotion-main');
+            if (consentElement) consentElement.classList.add('hidden');
+            if (mainElement) mainElement.classList.remove('hidden');
         }
     }
 
@@ -458,10 +629,45 @@ class RealtimeEmotionUI {
 
                 // 감정 분석
                 const result = await this.emotionAnalyzer.analyze(frameData);
+                
+                console.log('분석 결과:', result);
 
-                if (result.success && result.faceDetected) {
+                // 얼굴 감지 확인
+                if (!result) {
+                    console.log('분석 결과가 없습니다.');
+                    this.updateUINoFace();
+                    return;
+                }
+                
+                // faceDetected가 명확히 false인 경우 얼굴 미감지 처리
+                if (result.faceDetected === false) {
+                    console.log('얼굴 미감지:', {
+                        success: result?.success,
+                        faceDetected: result?.faceDetected
+                    });
+                    this.updateUINoFace();
+                    return; // 얼굴이 없으면 더 이상 처리하지 않음
+                }
+                
+                // success가 false인 경우도 처리하지 않음
+                if (result.success === false) {
+                    console.log('분석 실패:', {
+                        success: result?.success,
+                        faceDetected: result?.faceDetected
+                    });
+                    this.updateUINoFace();
+                    return;
+                }
+                
+                // 얼굴이 감지되고 분석이 성공한 경우만 처리
+                if (result.faceDetected === true && result.success !== false) {
                     this.processAnalysisResult(result);
                 } else {
+                    // 불명확한 경우 얼굴 미감지로 처리
+                    console.log('얼굴 감지 상태 불명확:', {
+                        success: result?.success,
+                        faceDetected: result?.faceDetected
+                    });
                     this.updateUINoFace();
                 }
             } catch (error) {
@@ -471,6 +677,12 @@ class RealtimeEmotionUI {
     }
 
     processAnalysisResult(result) {
+        // 얼굴이 감지되지 않았으면 처리하지 않음
+        if (!result || result.faceDetected !== true) {
+            console.warn('processAnalysisResult: 얼굴이 감지되지 않았습니다.');
+            return;
+        }
+        
         // 스무딩 적용
         this.applySmoothing(result.emotions);
 
@@ -497,11 +709,17 @@ class RealtimeEmotionUI {
         const alpha = EmotionConfig.smoothingFactor;
 
         Object.entries(newEmotions).forEach(([emotion, value]) => {
+            // 입력 값 검증: 0-1 범위로 제한
+            let normalizedValue = typeof value === 'number' ? value : 0;
+            normalizedValue = Math.max(0, Math.min(1, normalizedValue));
+            
             if (this.smoothedEmotions[emotion] === undefined) {
-                this.smoothedEmotions[emotion] = value;
+                this.smoothedEmotions[emotion] = normalizedValue;
             } else {
-                this.smoothedEmotions[emotion] =
-                    alpha * value + (1 - alpha) * this.smoothedEmotions[emotion];
+                // 스무딩 계산
+                let smoothed = alpha * normalizedValue + (1 - alpha) * this.smoothedEmotions[emotion];
+                // 스무딩 결과도 0-1 범위로 제한
+                this.smoothedEmotions[emotion] = Math.max(0, Math.min(1, smoothed));
             }
         });
     }
@@ -527,10 +745,17 @@ class RealtimeEmotionUI {
             if (item) {
                 const fill = item.querySelector('.emotion-bar-fill');
                 const valueEl = item.querySelector('.emotion-bar-value');
-                const percentage = Math.round(value * 100);
+                
+                // 값 검증: 0-1 범위로 제한
+                let normalizedValue = typeof value === 'number' ? value : 0;
+                normalizedValue = Math.max(0, Math.min(1, normalizedValue)); // 0-1 범위로 제한
+                
+                const percentage = Math.round(normalizedValue * 100);
+                // 퍼센트도 0-100 범위로 제한 (이중 안전장치)
+                const safePercentage = Math.max(0, Math.min(100, percentage));
 
-                fill.style.width = `${percentage}%`;
-                valueEl.textContent = `${percentage}%`;
+                fill.style.width = `${safePercentage}%`;
+                valueEl.textContent = `${safePercentage}%`;
             }
         });
     }
@@ -540,9 +765,13 @@ class RealtimeEmotionUI {
         const emotionInfo = EmotionConfig.emotions[primaryEmotion];
 
         if (badge && emotionInfo) {
-            badge.querySelector('.emotion-emoji').textContent = emotionInfo.emoji;
-            badge.querySelector('.emotion-label').textContent =
-                `${emotionInfo.koLabel} (${Math.round(confidence * 100)}%)`;
+            const emojiEl = badge.querySelector('.emotion-emoji');
+            const labelEl = badge.querySelector('.emotion-label');
+            const confidenceEl = badge.querySelector('.emotion-confidence');
+            
+            if (emojiEl) emojiEl.textContent = emotionInfo.emoji;
+            if (labelEl) labelEl.textContent = emotionInfo.koLabel;
+            if (confidenceEl) confidenceEl.textContent = `신뢰도 (confidence): ${Math.round(confidence * 100)}%`;
             badge.style.borderColor = emotionInfo.color;
         }
     }
@@ -550,32 +779,60 @@ class RealtimeEmotionUI {
     updateMetrics(valence, arousal, engagement) {
         // Valence 인디케이터 (-1 ~ 1 -> 0% ~ 100%)
         const valenceIndicator = document.getElementById('valence-indicator');
+        const valenceValue = document.getElementById('valence-value');
+        const valenceDescription = document.getElementById('valence-description');
+        
         if (valenceIndicator) {
             const valencePercent = ((valence + 1) / 2) * 100;
             valenceIndicator.style.left = `${valencePercent}%`;
 
-            // 색상 변경
+            // 색상 변경 및 값 표시
             if (valence > 0.2) {
                 valenceIndicator.style.background = '#22c55e';
+                if (valenceValue) {
+                    const percent = Math.round(valencePercent);
+                    valenceValue.textContent = `긍정적 ${percent}%`;
+                    valenceValue.style.color = '#22c55e';
+                }
+                if (valenceDescription) {
+                    valenceDescription.textContent = '긍정적인 감정 상태';
+                }
             } else if (valence < -0.2) {
                 valenceIndicator.style.background = '#ef4444';
+                if (valenceValue) {
+                    const percent = Math.round(100 - valencePercent);
+                    valenceValue.textContent = `부정적 ${percent}%`;
+                    valenceValue.style.color = '#ef4444';
+                }
+                // 설명은 툴팁으로만 표시 (제거)
             } else {
                 valenceIndicator.style.background = '#6b7280';
+                if (valenceValue) {
+                    valenceValue.textContent = '중립';
+                    valenceValue.style.color = '#6b7280';
+                }
+                // 설명은 툴팁으로만 표시 (제거)
             }
         }
 
-        // Arousal
+        // Arousal (각성도)
         const arousalFill = document.getElementById('arousal-fill');
         const arousalValue = document.getElementById('arousal-value');
+        const arousalDescription = document.getElementById('arousal-description');
+        
         if (arousalFill && arousalValue) {
             const arousalPercent = Math.round(arousal * 100);
             arousalFill.style.width = `${arousalPercent}%`;
             arousalValue.textContent = `${arousalPercent}%`;
+            
+            // 설명은 툴팁으로만 표시 (제거)
         }
 
-        // Engagement
+        // Engagement (참여도)
         const engagementFill = document.getElementById('engagement-fill');
         const engagementValue = document.getElementById('engagement-value');
+        const engagementDescription = document.getElementById('engagement-description');
+        
         if (engagementFill && engagementValue) {
             const engagementPercent = Math.round(engagement * 100);
             engagementFill.style.width = `${engagementPercent}%`;
@@ -584,8 +841,10 @@ class RealtimeEmotionUI {
             // 참여도 낮음 경고
             if (engagement < EmotionConfig.alertThresholds.engagementLow) {
                 engagementFill.style.background = '#ef4444';
+                // 설명은 툴팁으로만 표시 (제거)
             } else {
                 engagementFill.style.background = '#22c55e';
+                // 설명은 툴팁으로만 표시 (제거)
             }
         }
     }
@@ -663,9 +922,21 @@ class RealtimeEmotionUI {
     updateUINoFace() {
         const badge = document.getElementById('current-emotion-badge');
         if (badge) {
-            badge.querySelector('.emotion-emoji').textContent = '👤';
-            badge.querySelector('.emotion-label').textContent = '얼굴 감지 중...';
+            const emojiEl = badge.querySelector('.emotion-emoji');
+            const labelEl = badge.querySelector('.emotion-label');
+            const confidenceEl = badge.querySelector('.emotion-confidence');
+            
+            if (emojiEl) emojiEl.textContent = '👤';
+            if (labelEl) labelEl.textContent = '얼굴 감지 중...';
+            if (confidenceEl) confidenceEl.textContent = '';
+            
+            // 배지 스타일 초기화
+            badge.style.borderColor = '#B2BEC3';
+            badge.style.background = 'linear-gradient(135deg, #B2BEC315 0%, #B2BEC308 100%)';
         }
+        
+        // 감정 분포 바는 업데이트하지 않음 (이전 상태 유지)
+        // 히스토리도 업데이트하지 않음
     }
 
     checkAlerts(result) {
@@ -704,16 +975,13 @@ class RealtimeEmotionUI {
     }
 
     togglePause() {
-        const pauseBtn = document.getElementById('emotion-pause');
-
+        // 일시정지 기능 제거됨
         if (this.isRunning) {
             clearInterval(this.analysisTimer);
             this.isRunning = false;
-            pauseBtn.textContent = '▶️ 재개';
         } else {
             this.isRunning = true;
             this.startAnalysisLoop();
-            pauseBtn.textContent = '⏸️ 일시정지';
         }
     }
 
@@ -739,6 +1007,7 @@ class RealtimeEmotionUI {
         document.getElementById('emotion-main').classList.add('hidden');
         document.getElementById('emotion-consent').classList.remove('hidden');
     }
+
 
     showError(message) {
         const consent = document.getElementById('emotion-consent');

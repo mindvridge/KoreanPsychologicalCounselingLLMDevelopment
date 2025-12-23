@@ -340,13 +340,44 @@ class VectorStoreManager:
         os.makedirs(persist_directory, exist_ok=True)
 
         # 한국어 임베딩 모델 로드
+        # safetensors를 사용하여 보안 취약점(CVE-2025-32434) 회피
+        
+        # safetensors 우선 사용 설정
+        os.environ.setdefault('SAFETENSORS_FAST_GPU', '1')
+        # transformers가 safetensors를 우선 사용하도록 설정
+        os.environ.setdefault('TRANSFORMERS_SAFETENSORS_FAST_GPU', '1')
+        
         try:
-            self.embedding_model = SentenceTransformer(embedding_model)
-            logger.info(f"임베딩 모델 로드 완료: {embedding_model}")
+            # safetensors를 사용하여 모델 로드 시도
+            # SentenceTransformer는 내부적으로 transformers를 사용하며,
+            # 모델이 safetensors 형식이면 자동으로 사용함
+            self.embedding_model = SentenceTransformer(
+                embedding_model,
+                trust_remote_code=True
+            )
+            logger.info(f"✅ 임베딩 모델 로드 완료: {embedding_model}")
         except Exception as e:
-            logger.error(f"임베딩 모델 로드 실패: {e}")
-            logger.warning("대체 모델 사용: paraphrase-multilingual-MiniLM-L12-v2")
-            self.embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+            error_str = str(e)
+            # PyTorch 버전 문제 감지
+            if "torch.load" in error_str or "v2.6" in error_str or "CVE-2025-32434" in error_str:
+                logger.warning(f"⚠️ 임베딩 모델 로드 실패 (PyTorch 보안 정책): {error_str[:200]}")
+                logger.info("📦 대체 모델 사용: paraphrase-multilingual-MiniLM-L12-v2")
+                logger.info("💡 참고: PyTorch 2.6+는 보안상 torch.load 제한이 있습니다.")
+                logger.info("   모델이 safetensors 형식이면 자동으로 사용됩니다.")
+            else:
+                logger.error(f"❌ 임베딩 모델 로드 실패: {error_str[:200]}")
+                logger.warning("📦 대체 모델 사용: paraphrase-multilingual-MiniLM-L12-v2")
+            
+            # 대체 모델 로드 시도
+            try:
+                self.embedding_model = SentenceTransformer(
+                    "paraphrase-multilingual-MiniLM-L12-v2",
+                    trust_remote_code=True
+                )
+                logger.info("✅ 대체 모델 로드 완료: paraphrase-multilingual-MiniLM-L12-v2")
+            except Exception as e2:
+                logger.error(f"❌ 대체 모델 로드도 실패: {e2}")
+                raise
 
         # 문서 저장소
         self.documents: List[Document] = []
@@ -1005,7 +1036,10 @@ class MentalHealthRAG:
     def __init__(
         self,
         knowledge_base_dir: str = "./knowledge_base",
-        persist_directory: str = "./mental_health_vectors"
+        persist_directory: str = "./mental_health_vectors",
+        chunk_size: int = 500,
+        chunk_overlap: int = 50,
+        embedding_model: str = "jhgan/ko-sroberta-multitask"
     ):
         """
         초기화
@@ -1013,13 +1047,22 @@ class MentalHealthRAG:
         Args:
             knowledge_base_dir: 지식 베이스 디렉토리
             persist_directory: 벡터 저장 디렉토리
+            chunk_size: 문서 청크 크기
+            chunk_overlap: 청크 오버랩 크기
+            embedding_model: 임베딩 모델 이름
         """
         self.knowledge_base_dir = knowledge_base_dir
         self.persist_directory = persist_directory
 
         # 컴포넌트 초기화
-        self.doc_processor = DocumentProcessor()
-        self.vector_store = VectorStoreManager(persist_directory=persist_directory)
+        self.doc_processor = DocumentProcessor(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
+        )
+        self.vector_store = VectorStoreManager(
+            persist_directory=persist_directory,
+            embedding_model=embedding_model
+        )
         self.search_engine = HybridSearchEngine(self.vector_store)
         self.context_builder = ContextBuilder()
         self.evaluator = RAGEvaluator()

@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, validator
 import uvicorn
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
@@ -84,7 +85,267 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize rate limiter
-limiter = Limiter(key_func=get_remote_address)
+# Note: Starlette Config가 .env 파일을 읽을 때 UTF-8 인코딩을 사용하도록 보장
+# Limiter는 내부적으로 Starlette Config를 사용하므로, .env 파일이 UTF-8이어야 함
+# Limiter 초기화 전에 .env 파일을 UTF-8로 변환
+from pathlib import Path
+import shutil
+
+env_path = Path(".env")
+if env_path.exists():
+    try:
+        # 먼저 UTF-8로 읽기 시도
+        try:
+            test_content = env_path.read_text(encoding='utf-8')
+            # UTF-8로 읽기 성공했지만, Starlette Config가 cp949로 읽으려고 할 수 있으므로
+            # 강제로 UTF-8로 다시 저장하여 BOM이나 다른 문제 제거
+            env_path.write_text(test_content, encoding='utf-8', newline='\n')
+            logger.debug(".env file is already UTF-8 encoded and verified")
+        except UnicodeDecodeError:
+            # 여러 인코딩으로 시도
+            encodings = ['utf-8-sig', 'cp949', 'euc-kr', 'latin1', 'iso-8859-1', 'windows-1252']
+            content = None
+            used_encoding = None
+            
+            for enc in encodings:
+                try:
+                    content = env_path.read_text(encoding=enc, errors='strict')
+                    used_encoding = enc
+                    logger.info(f"Read .env file with {enc} encoding, converting to UTF-8...")
+                    break
+                except (UnicodeDecodeError, LookupError):
+                    continue
+            
+            if content is None:
+                # 모든 인코딩 실패 시 errors='replace'로 읽기 (더 안전함)
+                try:
+                    content = env_path.read_bytes().decode('utf-8', errors='replace')
+                    used_encoding = 'utf-8 (with errors replaced)'
+                    logger.warning("Using UTF-8 with errors replaced for .env file")
+                except Exception:
+                    # 최후의 수단: errors='ignore'
+                    content = env_path.read_bytes().decode('utf-8', errors='ignore')
+                    used_encoding = 'utf-8 (with errors ignored)'
+                    logger.warning("Using UTF-8 with errors ignored for .env file")
+            
+            # 백업 생성
+            backup_path = env_path.with_suffix('.env.backup')
+            try:
+                shutil.copy(env_path, backup_path)
+                logger.info(f"Created backup: {backup_path}")
+            except Exception as backup_error:
+                logger.warning(f"Could not create backup: {backup_error}")
+            
+            # UTF-8로 저장 (BOM 없이)
+            env_path.write_text(content, encoding='utf-8', newline='\n')
+            logger.info(f"Converted .env file to UTF-8 encoding (original: {used_encoding})")
+            
+            # 변환 후 검증
+            try:
+                env_path.read_text(encoding='utf-8')
+                logger.info("Verified: .env file is now UTF-8 encoded")
+            except UnicodeDecodeError:
+                logger.error("Failed to verify UTF-8 encoding after conversion")
+    except Exception as e:
+        logger.warning(f"Could not verify/convert .env file encoding: {e}")
+
+# Limiter 초기화 전에 .env 파일을 UTF-8로 재저장하고
+# Starlette Config가 .env 파일을 읽지 않도록 임시로 이동
+# 환경 변수는 이미 dotenv로 로드되었으므로 Limiter 초기화 시 .env 파일이 필요 없음
+env_temp_path = None
+if env_path.exists():
+    try:
+        # UTF-8로 읽고 다시 UTF-8로 저장하여 인코딩 확실히 보장
+        content = env_path.read_bytes().decode('utf-8', errors='replace')
+        env_path.write_text(content, encoding='utf-8', newline='\n')
+        logger.debug("Re-saved .env file as UTF-8 before Limiter initialization")
+        
+        # Starlette Config가 .env 파일을 읽지 않도록 임시로 이동
+        # (환경 변수는 이미 dotenv로 로드되었으므로 필요 없음)
+        env_temp_path = env_path.with_suffix('.env.temp_limiter')
+        env_path.rename(env_temp_path)
+        logger.debug("Temporarily moved .env file to prevent Starlette Config from reading it")
+    except Exception as e:
+        logger.warning(f"Could not prepare .env file for Limiter initialization: {e}")
+
+# Limiter 초기화 (환경 변수는 이미 dotenv로 로드됨)
+# Starlette Config가 .env 파일을 읽지 않도록 .env 파일을 임시로 이동시킴
+limiter = None
+try:
+    # Limiter는 내부적으로 Starlette Config를 사용하지만,
+    # 환경 변수는 이미 dotenv로 로드되었으므로 .env 파일을 다시 읽을 필요 없음
+    # .env 파일을 임시로 이동시켜서 Starlette Config가 읽지 못하도록 함
+    limiter = Limiter(key_func=get_remote_address)
+    logger.info("Limiter initialized successfully")
+    
+    # Limiter 초기화 성공 후 .env 파일 복원
+    if env_temp_path and env_temp_path.exists():
+        env_temp_path.rename(env_path)
+        logger.debug("Restored .env file after Limiter initialization")
+        env_temp_path = None
+except UnicodeDecodeError as e:
+    # .env 파일이 이미 이동되었는데도 오류가 발생하면 복원 후 재시도
+    if env_temp_path and env_temp_path.exists():
+        try:
+            env_temp_path.rename(env_path)
+            env_temp_path = None
+            logger.debug("Restored .env file due to UnicodeDecodeError")
+        except Exception:
+            pass
+    
+    logger.error(f"UnicodeDecodeError during Limiter initialization: {e}")
+    logger.info("Attempting to automatically fix .env file encoding...")
+    # 자동으로 .env 파일 인코딩 수정 시도
+    try:
+        # 직접 인코딩 수정 시도
+        if env_path.exists():
+            try:
+                # 바이너리로 읽기
+                data = env_path.read_bytes()
+                # 여러 인코딩 시도
+                encodings = ['utf-8', 'utf-8-sig', 'cp949', 'euc-kr', 'latin1', 'iso-8859-1', 'windows-1252']
+                content = None
+                used_encoding = None
+                
+                for enc in encodings:
+                    try:
+                        content = data.decode(enc)
+                        used_encoding = enc
+                        logger.info(f"Read .env file with {enc} encoding")
+                        break
+                    except (UnicodeDecodeError, LookupError):
+                        continue
+                
+                if content is None:
+                    # 모든 인코딩 실패 시 errors='ignore'로 읽기
+                    content = data.decode('utf-8', errors='ignore')
+                    used_encoding = 'utf-8 (with errors ignored)'
+                    logger.warning("Using UTF-8 with errors ignored for .env file")
+                
+                # 백업 생성
+                backup_path = env_path.with_suffix('.env.backup')
+                try:
+                    shutil.copy(env_path, backup_path)
+                except Exception:
+                    pass
+                
+                # UTF-8로 저장 (BOM 없이)
+                env_path.write_text(content, encoding='utf-8', newline='\n')
+                logger.info(f"Converted .env file to UTF-8 encoding (original: {used_encoding})")
+                
+                # 다시 시도
+                limiter = Limiter(key_func=get_remote_address)
+                logger.info("Limiter initialized successfully after fixing .env encoding")
+            except Exception as direct_fix_error:
+                logger.warning(f"Direct encoding fix failed: {direct_fix_error}")
+                # subprocess로 시도
+                import subprocess
+                import sys
+                result = subprocess.run(
+                    [sys.executable, "fix_env_encoding.py"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    logger.info("Successfully fixed .env file encoding via script. Retrying Limiter initialization...")
+                    try:
+                        limiter = Limiter(key_func=get_remote_address)
+                        logger.info("Limiter initialized successfully after fixing .env encoding")
+                    except Exception as retry_error:
+                        logger.warning(f"Limiter initialization still failed after fixing encoding: {retry_error}")
+                        # .env 파일을 임시로 이름 변경하여 Limiter 초기화
+                        if env_path.exists():
+                            temp_path = env_path.with_suffix('.env.temp')
+                            env_path.rename(temp_path)
+                            try:
+                                limiter = Limiter(key_func=get_remote_address)
+                                logger.info("Limiter initialized after moving .env file")
+                            except Exception:
+                                pass
+                            temp_path.rename(env_path)
+                            logger.warning("Temporarily moved .env file to initialize Limiter")
+                else:
+                    logger.warning(f"Failed to fix .env encoding via script: {result.stderr}")
+                    # .env 파일을 임시로 이름 변경하여 Limiter 초기화
+                    if env_path.exists():
+                        temp_path = env_path.with_suffix('.env.temp')
+                        env_path.rename(temp_path)
+                        limiter = Limiter(key_func=get_remote_address)
+                        temp_path.rename(env_path)
+                        logger.warning("Temporarily moved .env file to initialize Limiter")
+                        logger.warning("Please manually run: python fix_env_encoding.py")
+    except Exception as auto_fix_error:
+        logger.warning(f"Failed to automatically fix .env encoding: {auto_fix_error}")
+        # .env 파일을 임시로 이름 변경하여 Limiter 초기화
+        try:
+            if env_path.exists():
+                temp_path = env_path.with_suffix('.env.temp')
+                env_path.rename(temp_path)
+                try:
+                    limiter = Limiter(key_func=get_remote_address)
+                    logger.info("Limiter initialized after moving .env file")
+                except Exception:
+                    pass
+                temp_path.rename(env_path)
+                logger.warning("Temporarily moved .env file to initialize Limiter")
+                logger.warning("Please manually run: python fix_env_encoding.py")
+        except Exception:
+            pass
+    # .env 파일이 없는 경우 또는 모든 시도 실패
+    if not env_path.exists() or limiter is None:
+        try:
+            limiter = Limiter(key_func=get_remote_address)
+            logger.info("Limiter initialized without .env file")
+        except Exception as rename_error:
+            logger.error(f"Failed to handle .env file: {rename_error}")
+            # 최후의 수단: .env 파일 없이 Limiter 생성
+            try:
+                limiter = Limiter(key_func=get_remote_address)
+                logger.info("Limiter initialized as fallback")
+            except:
+                # Limiter 초기화 실패해도 계속 진행
+                logger.warning("Could not initialize Limiter, continuing without rate limiting")
+                limiter = None
+except Exception as e:
+    logger.warning(f"Rate limiter initialization warning: {e}")
+    # Fallback: 기본 설정으로 Limiter 생성
+    try:
+        limiter = Limiter(key_func=get_remote_address)
+        logger.info("Limiter initialized as fallback")
+    except:
+        logger.warning("Could not initialize Limiter, continuing without rate limiting")
+        limiter = None
+
+# .env 파일 복원 (아직 복원되지 않은 경우)
+# env_temp_path는 Limiter 초기화 전에 설정됨
+if 'env_temp_path' in locals() and env_temp_path and env_temp_path.exists():
+    try:
+        env_temp_path.rename(env_path)
+        logger.debug("Restored .env file after all Limiter initialization attempts")
+    except Exception as restore_error:
+        logger.warning(f"Could not restore .env file: {restore_error}")
+
+# .env 파일 복원 (아직 복원되지 않은 경우)
+if env_temp_path and env_temp_path.exists():
+    try:
+        env_temp_path.rename(env_path)
+        logger.debug("Restored .env file after all Limiter initialization attempts")
+    except Exception as restore_error:
+        logger.warning(f"Could not restore .env file: {restore_error}")
+
+# Limiter가 None이면 더미 Limiter 생성
+if limiter is None:
+    class DummyLimiter:
+        def __call__(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+        def exempt(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+    limiter = DummyLimiter()
 
 # Create FastAPI app
 app = FastAPI(
@@ -95,9 +356,25 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Add rate limit exception handler
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Add rate limit exception handler (limiter가 None이 아닐 때만)
+if limiter is not None:
+    try:
+        app.state.limiter = limiter
+        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    except Exception as e:
+        logger.warning(f"Could not set up rate limiting: {e}")
+
+# 실시간 감정 분석 API 라우터 통합
+try:
+    from src.emotion_api import router as emotion_router
+    if emotion_router:
+        app.include_router(emotion_router)
+        logger.info("실시간 감정 분석 API 라우터 통합 완료")
+    else:
+        logger.warning("실시간 감정 분석 API 라우터가 None입니다.")
+except Exception as e:
+    logger.warning(f"실시간 감정 분석 API 라우터 통합 실패: {e}")
+    logger.warning(f"오류 상세: {type(e).__name__}: {str(e)}", exc_info=True)
 
 # CORS Configuration
 app.add_middleware(
@@ -114,6 +391,22 @@ frontend_path = Path(__file__).parent.parent / "frontend"
 if frontend_path.exists():
     app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
     logger.info(f"Frontend static files mounted at /static from {frontend_path}")
+    
+    # Favicon 처리
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon():
+        """Favicon 제공"""
+        from fastapi.responses import Response
+        import base64
+        
+        # 간단한 16x16 파비콘 (빈 파비콘으로 404 방지)
+        # 실제로는 frontend/images/ 폴더에 favicon.ico 파일을 추가하는 것이 좋습니다
+        favicon_path = frontend_path / "favicon.ico"
+        if favicon_path.exists():
+            return FileResponse(str(favicon_path))
+        
+        # 파비콘이 없으면 빈 응답 반환 (404 방지)
+        return Response(content=b"", media_type="image/x-icon")
 else:
     logger.warning(f"Frontend directory not found at {frontend_path}")
 
@@ -164,6 +457,19 @@ class SessionResponse(BaseModel):
     total_messages: int
     crisis_detected_count: int
     last_activity: str
+
+
+class SessionListResponse(BaseModel):
+    """Session list response"""
+    sessions: List[SessionResponse]
+    total_count: int
+
+
+class SessionHistoryResponse(BaseModel):
+    """Session history response"""
+    session_id: str
+    conversation_history: List[Dict[str, Any]]
+    total_messages: int
 
 
 class AssessmentRequest(BaseModel):
@@ -1214,6 +1520,87 @@ async def get_user_history(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving conversation history: {str(e)}"
+        )
+
+
+@app.get("/api/v1/sessions", response_model=SessionListResponse, tags=["Sessions"])
+async def get_sessions(
+    limit: int = 20,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Get list of all sessions
+    
+    - **limit**: Maximum number of sessions to return (default: 20)
+    
+    Returns list of sessions sorted by last activity
+    """
+    try:
+        # Get all sessions and sort by last_activity
+        session_list = []
+        for session_id, session_data in sessions.items():
+            session_list.append({
+                "session_id": session_id,
+                "created_at": session_data.get("created_at", datetime.now()).isoformat(),
+                "total_messages": len(session_data.get("conversation_history", [])),
+                "crisis_detected_count": session_data.get("crisis_detected_count", 0),
+                "last_activity": session_data.get("last_activity", datetime.now()).isoformat()
+            })
+        
+        # Sort by last_activity (most recent first)
+        session_list.sort(key=lambda x: x["last_activity"], reverse=True)
+        
+        # Limit results
+        session_list = session_list[:limit]
+        
+        return SessionListResponse(
+            sessions=[SessionResponse(**s) for s in session_list],
+            total_count=len(session_list)
+        )
+    
+    except Exception as e:
+        logger.error(f"Error retrieving sessions: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving sessions: {str(e)}"
+        )
+
+
+@app.get("/api/v1/sessions/{session_id}/history", response_model=SessionHistoryResponse, tags=["Sessions"])
+async def get_session_history(
+    session_id: str,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Get conversation history for a specific session
+    
+    - **session_id**: Session ID
+    
+    Returns conversation history for the session
+    """
+    try:
+        if session_id not in sessions:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Session {session_id} not found"
+            )
+        
+        session_data = sessions[session_id]
+        conversation_history = session_data.get("conversation_history", [])
+        
+        return SessionHistoryResponse(
+            session_id=session_id,
+            conversation_history=conversation_history,
+            total_messages=len(conversation_history)
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving session history: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving session history: {str(e)}"
         )
 
 

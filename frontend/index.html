@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>마음챗 - AI 심리상담 서비스</title>
+    <title>마브AI - AI 심리상담 서비스</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/realtime-emotion.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -14,7 +16,7 @@
     <header class="header">
         <div class="container">
             <div class="header-content">
-                <h1 class="logo">🧠 마음챗</h1>
+                <h1 class="logo">마브AI</h1>
                 <p class="tagline">당신의 마음을 이해하는 AI 심리상담</p>
                 <div class="user-info">
                     <button id="user-menu-btn" class="btn-icon">
@@ -44,27 +46,68 @@
                             언제든지 편하게 대화를 시작하세요.<br>
                             당신의 감정과 고민을 함께 나누겠습니다.
                         </p>
+                        <div style="display: flex; flex-direction: column; gap: 1rem; align-items: center;">
                         <button id="start-chat-btn" class="btn-primary" style="font-size: 1.2rem; padding: 1rem 3rem;">
                             상담 시작하기
                         </button>
+                            <button id="load-session-btn" class="btn-secondary" style="font-size: 1rem; padding: 0.75rem 2rem;">
+                                📋 이전 대화 이어가기
+                            </button>
+                        </div>
                         <p style="margin-top: 1.5rem; font-size: 0.9rem; color: var(--text-secondary);">
                             ※ 모든 대화는 안전하게 보호됩니다
                         </p>
                     </div>
                 </section>
+                
+                <!-- Session Selection Modal -->
+                <div id="session-modal" class="modal" style="display: none;">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>이전 대화 선택</h2>
+                            <button class="modal-close" id="close-session-modal">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="session-loading" style="text-align: center; padding: 2rem;">
+                                <p>세션 목록을 불러오는 중...</p>
+                            </div>
+                            <div id="session-list" style="display: none;">
+                                <!-- 세션 목록이 여기에 동적으로 추가됩니다 -->
+                            </div>
+                            <div id="session-empty" style="display: none; text-align: center; padding: 2rem; color: var(--text-secondary);">
+                                <p>이전 대화가 없습니다.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Avatar Enlarge Modal -->
+                <div id="avatar-modal" class="modal" style="display: none;">
+                    <div class="modal-content avatar-modal-content">
+                        <button class="modal-close" id="close-avatar-modal">&times;</button>
+                        <div class="avatar-modal-body">
+                            <img id="avatar-modal-image" src="" alt="상담사 아바타" class="avatar-modal-image">
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- Chat Screen -->
         <div id="chat-screen" class="screen">
+            <div class="chat-screen-wrapper">
+                <!-- Main Chat Area -->
             <div class="chat-container">
                 <!-- Chat Header -->
                 <div class="chat-header">
                     <button id="back-to-home-btn" class="btn-icon">← 돌아가기</button>
                     <div class="counselor-info">
-                        <div class="counselor-avatar">🧠</div>
+                            <div class="counselor-avatar">
+                                <img src="/static/images/counselor_avatar.png" alt="상담사" class="counselor-avatar-image avatar-clickable" onclick="showAvatarModal('/static/images/counselor_avatar.png')" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                                <span style="display:none;">👩‍⚕️</span>
+                            </div>
                         <div>
-                            <h4>마음챗 AI 상담</h4>
+                                <h4>마브AI 상담</h4>
                             <p>심리상담 서비스</p>
                         </div>
                     </div>
@@ -81,6 +124,11 @@
 
                 <!-- Chat Messages -->
                 <div id="chat-messages" class="chat-messages">
+                    <!-- Loading Overlay for Messages Only -->
+                    <div id="chat-loading-overlay" class="loading-overlay">
+                        <div class="loading-spinner"></div>
+                        <p>처리 중입니다...</p>
+                    </div>
                     <div class="welcome-message">
                         <p>상담사와의 대화가 시작됩니다. 편안하게 이야기 나눠보세요.</p>
                     </div>
@@ -91,6 +139,41 @@
                     <div class="chat-input-wrapper">
                         <textarea id="chat-input" placeholder="메시지를 입력하세요..." rows="1"></textarea>
                         <button id="send-message-btn" class="btn-send">전송</button>
+                    </div>
+                    <div class="chat-settings-row">
+                        <div class="tts-toggle-container">
+                            <label for="tts-toggle" class="tts-toggle-label">
+                                <input type="checkbox" id="tts-toggle" class="tts-toggle-checkbox" checked>
+                                <span class="tts-toggle-slider"></span>
+                                <span class="tts-toggle-text">TTS</span>
+                            </label>
+                        </div>
+                        <label for="chat-tts-engine-select" class="chat-tts-label">TTS 엔진:</label>
+                        <select id="chat-tts-engine-select" class="chat-tts-engine-select" title="TTS 엔진 선택">
+                            <option value="zonos">Zonos TTS (기본)</option>
+                            <option value="elevenlabs">ElevenLabs TTS</option>
+                        </select>
+                        <script>
+                            // 채팅 TTS 엔진 선택 초기화 (로컬 스토리지에서 불러오기)
+                            document.addEventListener('DOMContentLoaded', () => {
+                                const chatTtsSelect = document.getElementById('chat-tts-engine-select');
+                                if (chatTtsSelect) {
+                                    const savedEngine = localStorage.getItem('tts_engine');
+                                    if (savedEngine) {
+                                        chatTtsSelect.value = savedEngine;
+                                    }
+                                    // 변경 시 로컬 스토리지에 저장
+                                    chatTtsSelect.addEventListener('change', (e) => {
+                                        localStorage.setItem('tts_engine', e.target.value);
+                                        // voice TTS 엔진 선택기도 동기화
+                                        const voiceTtsSelect = document.getElementById('tts-engine-select');
+                                        if (voiceTtsSelect) {
+                                            voiceTtsSelect.value = e.target.value;
+                                        }
+                                    });
+                                }
+                            });
+                        </script>
                     </div>
                     <div class="chat-info">
                         <small>💡 위기 상황 시 즉시 전문가의 도움을 받으세요: 자살예방상담전화 ☎️ 1393</small>
@@ -137,6 +220,22 @@
                             <button id="voice-settings-btn" class="voice-settings-btn" title="설정">
                                 ⚙️
                             </button>
+                            <select id="tts-engine-select" class="tts-engine-select" title="TTS 엔진 선택">
+                                <option value="zonos">Zonos TTS (기본)</option>
+                                <option value="elevenlabs">ElevenLabs TTS</option>
+                            </select>
+                            <script>
+                                // TTS 엔진 선택 초기화 (로컬 스토리지에서 불러오기)
+                                document.addEventListener('DOMContentLoaded', () => {
+                                    const ttsSelect = document.getElementById('tts-engine-select');
+                                    if (ttsSelect) {
+                                        const savedEngine = localStorage.getItem('tts_engine');
+                                        if (savedEngine) {
+                                            ttsSelect.value = savedEngine;
+                                        }
+                                    }
+                                });
+                            </script>
                             <select id="visualizer-type" class="visualizer-select">
                                 <option value="waveform">파형</option>
                                 <option value="spectrum">스펙트럼</option>
@@ -148,6 +247,57 @@
 
                     <div class="chat-info">
                         <small>🎤 마이크 버튼 또는 스페이스바 | 🙌 자동 모드: 말하면 자동 인식 | ☎️ 1393</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Emotion Analysis Sidebars -->
+                <div class="emotion-sidebars-container">
+                    <!-- Real-time Emotion Analysis Sidebar (Webcam) -->
+                    <div id="emotion-sidebar" class="emotion-sidebar">
+                        <div id="realtime-emotion-widget" class="realtime-emotion-widget">
+                            <!-- Widget will be initialized by realtime-emotion.js -->
+                        </div>
+                    </div>
+                    
+                    <!-- Chat Emotion Analysis Sidebar (Text-based) -->
+                    <div id="chat-emotion-sidebar" class="chat-emotion-sidebar">
+                        <div class="chat-emotion-widget">
+                            <div class="chat-emotion-header">
+                                <span class="chat-emotion-icon">💬</span>
+                                <h3>대화 감정 분석</h3>
+                            </div>
+                            
+                            <div class="chat-emotion-content">
+                                <!-- 현재 감정 -->
+                                <div class="chat-emotion-current">
+                                    <h4>현재 감정</h4>
+                                    <div id="chat-emotion-badge" class="chat-emotion-badge-large">
+                                        <span class="emotion-emoji-large">😐</span>
+                                        <div class="emotion-info">
+                                            <span class="emotion-name-large">중립</span>
+                                            <span class="emotion-confidence-large">신뢰도 (confidence): 0%</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                            
+                                <!-- 감정 분포 -->
+                                <div class="chat-emotion-distribution">
+                                    <h4>감정 분포</h4>
+                                    <div id="chat-emotion-bars" class="chat-emotion-bars">
+                                        <!-- 동적으로 생성됨 -->
+                                    </div>
+                                </div>
+                                
+                                <!-- 최근 감정 히스토리 -->
+                                <div class="chat-emotion-history">
+                                    <h4>최근 감정 변화</h4>
+                                    <div id="chat-emotion-timeline" class="chat-emotion-timeline">
+                                        <p class="no-data">대화를 시작하면 감정 분석이 표시됩니다.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -160,9 +310,12 @@
                 <div class="voice-header">
                     <button id="voice-back-btn" class="btn-icon">← 돌아가기</button>
                     <div class="counselor-info">
-                        <div class="counselor-avatar">🧠</div>
+                        <div class="counselor-avatar">
+                            <img src="/static/images/counselor_avatar.png" alt="상담사" class="counselor-avatar-image avatar-clickable" onclick="showAvatarModal('/static/images/counselor_avatar.png')" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            <span style="display:none;">👩‍⚕️</span>
+                        </div>
                         <div>
-                            <h4>마음챗 AI 상담</h4>
+                            <h4>마브AI 상담</h4>
                             <p id="voice-connection-status">연결 중...</p>
                         </div>
                     </div>
@@ -267,21 +420,50 @@
         <!-- User Dashboard Screen -->
         <div id="dashboard-screen" class="screen">
             <div class="container">
+                <div class="dashboard-header">
                 <h2>내 상담 현황</h2>
+                    <button id="back-to-home-from-dashboard-btn" class="btn-secondary">홈으로 돌아가기</button>
+                </div>
 
+                <!-- Stats Overview -->
                 <div class="dashboard-grid">
-                    <!-- Stats Cards -->
                     <div class="stat-card">
+                        <div class="stat-icon">💬</div>
                         <h4>총 상담 횟수</h4>
                         <p class="stat-value" id="total-sessions">0회</p>
                     </div>
                     <div class="stat-card">
+                        <div class="stat-icon">📝</div>
+                        <h4>총 메시지 수</h4>
+                        <p class="stat-value" id="total-messages">0개</p>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">⚠️</div>
+                        <h4>위기 감지</h4>
+                        <p class="stat-value" id="crisis-count">0회</p>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">⭐</div>
                         <h4>피드백 제출</h4>
                         <p class="stat-value" id="total-feedback">0회</p>
                     </div>
                 </div>
 
-                <button id="back-to-home-from-dashboard-btn" class="btn-secondary">홈으로 돌아가기</button>
+                <!-- Recent Sessions -->
+                <div class="dashboard-section">
+                    <h3>최근 상담 세션</h3>
+                    <div id="recent-sessions" class="session-list-container">
+                        <p class="no-data">최근 상담 내역이 없습니다.</p>
+                    </div>
+                </div>
+
+                <!-- Activity Timeline -->
+                <div class="dashboard-section">
+                    <h3>활동 타임라인</h3>
+                    <div id="activity-timeline" class="timeline-container">
+                        <p class="no-data">활동 내역이 없습니다.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </main>
@@ -289,7 +471,7 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="container">
-            <p>&copy; 2024 마음챗 - Korean Psychological Counseling LLM</p>
+            <p>&copy; 2024 마브AI - Korean Psychological Counseling LLM</p>
             <p>🚨 위기 상황: 자살예방상담전화 1393 | 정신건강위기상담 1577-0199</p>
         </div>
     </footer>
@@ -307,7 +489,7 @@
     <div id="consent-modal" class="consent-modal">
         <div class="consent-modal-content">
             <div class="consent-modal-header">
-                <h2>🧠 마음챗 서비스 이용 동의</h2>
+                <h2>마브AI 서비스 이용 동의</h2>
                 <p class="consent-modal-subtitle">서비스 이용을 위해 다음 사항에 동의가 필요합니다</p>
             </div>
 
@@ -428,6 +610,7 @@
     <script src="/static/voice.js"></script>
     <script src="/static/audio-visualizer.js"></script>
     <script src="/static/voice-app.js"></script>
+    <script src="/static/realtime-emotion.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>

@@ -13,7 +13,7 @@ import logging
 import asyncio
 import json
 import base64
-from typing import Optional, Dict, Any, Callable, Awaitable
+from typing import Optional, Dict, Any, Callable, Awaitable, Union
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -112,21 +112,27 @@ class VoiceStreamingPipeline:
 
         # 모듈 로드
         if self.stt is None:
-            from stt import WhisperSTT
+            from src.stt import WhisperSTT
             self.stt = WhisperSTT()
             await asyncio.to_thread(self.stt.load_model)
 
         if self.tts is None:
-            from tts import ZonosTTS
+            from src.tts import ZonosTTS
             self.tts = ZonosTTS()
             await asyncio.to_thread(self.tts.load_model)
 
         # LLM은 선택적
         if self.llm is None:
             try:
-                from main import CounselingChatbot
+                # 먼저 src.main에서 시도
+                try:
+                    from src.main import CounselingChatbot
+                except ImportError:
+                    # 루트 main.py에서 시도
+                    from main import CounselingChatbot
                 self.llm = CounselingChatbot()
-                await asyncio.to_thread(self.llm.load_model)
+                if hasattr(self.llm, 'load_model'):
+                    await asyncio.to_thread(self.llm.load_model)
             except Exception as e:
                 logger.warning(f"LLM not loaded: {e}")
 
@@ -209,7 +215,7 @@ class VoiceStreamingPipeline:
             session.state = SessionState.SPEAKING
 
             # 컨텍스트 기반 음성 설정
-            from tts import CounselorVoice, SpeechConfig
+            from src.tts import CounselorVoice, SpeechConfig
             speech_config = CounselorVoice.get_config_for_context({
                 "emotion": "neutral",
                 "response_type": "default"
@@ -297,9 +303,82 @@ class WebSocketVoiceHandler:
         ))
 
         try:
-            async for message in websocket:
-                await self._handle_message(websocket, session, message)
+            while True:
+                # FastAPI WebSocket 메시지 수신
+                try:
+                    # JSON 메시지 수신 시도
+                    message = await websocket.receive_json()
+                    if isinstance(message, dict):
+                        await self._handle_message(websocket, session, message)
+                    else:
+                        logger.warning(f"Received non-dict JSON message: {type(message)}")
+                        continue
+                        
+                except (ValueError, TypeError) as json_error:
+                    # JSON 파싱 오류 또는 타입 오류인 경우 바이너리 데이터로 처리
+                    try:
+                        message_data = await websocket.receive()
+                        
+                        # message_data는 딕셔너리 형태여야 함
+                        if not isinstance(message_data, dict):
+                            logger.warning(f"receive() returned non-dict: {type(message_data)}, value: {message_data}")
+                            continue
+                        
+                        # FastAPI WebSocket receive()는 {"type": "websocket.receive", "bytes": ...} 또는 {"type": "websocket.receive", "text": ...} 형태
+                        if "type" not in message_data:
+                            logger.warning(f"Message data missing 'type' key: {message_data.keys()}")
+                            continue
+                        
+                        if message_data["type"] != "websocket.receive":
+                            logger.warning(f"Unexpected message type: {message_data['type']}")
+                            continue
+                        
+                        # bytes 또는 text 필드 확인
+                        if "bytes" in message_data:
+                            # 바이너리 오디오 데이터
+                            if isinstance(message_data["bytes"], bytes):
+                                await self._handle_message(websocket, session, message_data["bytes"])
+                            else:
+                                logger.warning(f"bytes field is not bytes type: {type(message_data['bytes'])}")
+                                
+                        elif "text" in message_data:
+                            # 텍스트 메시지
+                            text_content = message_data["text"]
+                            if isinstance(text_content, str):
+                                try:
+                                    # 텍스트를 JSON으로 파싱 시도
+                                    text_data = json.loads(text_content)
+                                    await self._handle_message(websocket, session, text_data)
+                                except json.JSONDecodeError:
+                                    # JSON이 아니면 문자열로 처리
+                                    await self._handle_message(websocket, session, text_content)
+                            else:
+                                logger.warning(f"text field is not string type: {type(text_content)}")
+                        else:
+                            logger.warning(f"Message data has neither 'bytes' nor 'text': {list(message_data.keys())}")
+                            
+                    except Exception as receive_error:
+                        # WebSocketDisconnect는 정상적인 종료이므로 재발생
+                        error_str = str(receive_error).lower()
+                        if "disconnect" in error_str or "1000" in error_str or "1001" in error_str:
+                            raise
+                        logger.error(f"Error receiving message: {receive_error}", exc_info=True)
+                        # 오류가 발생해도 연결은 유지 (재시도)
+                        await asyncio.sleep(0.1)
+                        continue
+                        
+                except Exception as general_error:
+                    # WebSocketDisconnect는 재발생
+                    error_str = str(general_error).lower()
+                    if "disconnect" in error_str:
+                        raise
+                    logger.error(f"Unexpected error in WebSocket loop: {general_error}", exc_info=True)
+                    # 오류가 발생해도 연결은 유지 (재시도)
+                    await asyncio.sleep(0.1)
+                    continue
 
+        except WebSocketDisconnect:
+            logger.info(f"WebSocket disconnected: {session.session_id}")
         except Exception as e:
             logger.error(f"WebSocket error: {e}")
 
@@ -314,14 +393,28 @@ class WebSocketVoiceHandler:
     ) -> None:
         """메시지 처리"""
         try:
-            # JSON 메시지 파싱
-            if isinstance(message, str):
-                data = json.loads(message)
+            # 메시지 타입에 따른 파싱
+            if isinstance(message, dict):
+                # 이미 딕셔너리인 경우 (receive_json() 결과)
+                data = message
+            elif isinstance(message, str):
+                # 문자열인 경우 JSON 파싱
+                try:
+                    data = json.loads(message)
+                except json.JSONDecodeError:
+                    logger.warning(f"Invalid JSON string: {message[:100]}")
+                    return
             elif isinstance(message, bytes):
                 # 바이너리 오디오 데이터
                 data = {"type": "audio", "data": base64.b64encode(message).decode()}
             else:
-                data = message
+                logger.warning(f"Unknown message type: {type(message)}")
+                return
+
+            # data가 딕셔너리가 아닌 경우 처리
+            if not isinstance(data, dict):
+                logger.warning(f"Message data is not a dict: {type(data)}")
+                return
 
             msg_type = data.get("type", "unknown")
 

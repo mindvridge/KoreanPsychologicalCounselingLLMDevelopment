@@ -2,12 +2,23 @@
    실시간 감정 분석 스타일 (Real-time Emotion Analysis)
    ============================================================================ */
 
+/* 유틸리티 클래스 */
+.hidden {
+    display: none !important;
+}
+
 /* 메인 위젯 */
 .realtime-emotion-widget {
     background: var(--surface);
     border-radius: var(--radius-lg);
     box-shadow: 0 4px 12px var(--shadow);
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    width: 100%;
 }
 
 /* 헤더 */
@@ -15,9 +26,32 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--space-md);
-    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    padding: var(--space-md) var(--space-lg);
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
     color: white;
+    box-shadow: 0 2px 8px rgba(91, 138, 114, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.emotion-widget-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    animation: headerShine 3s infinite;
+}
+
+@keyframes headerShine {
+    0% {
+        left: -100%;
+    }
+    100% {
+        left: 100%;
+    }
 }
 
 .emotion-widget-title {
@@ -30,6 +64,9 @@
     font-size: 1.1rem;
     font-weight: 600;
     margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .emotion-widget-icon {
@@ -48,6 +85,8 @@
     gap: var(--space-xs);
     font-size: 0.85rem;
     cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .privacy-toggle input {
@@ -57,87 +96,200 @@
 .emotion-settings-btn {
     background: rgba(255, 255, 255, 0.2);
     border: none;
-    padding: 6px;
+    padding: 8px;
     border-radius: var(--radius);
     cursor: pointer;
     font-size: 1.1rem;
-    transition: background 0.2s;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
 }
 
 .emotion-settings-btn:hover {
     background: rgba(255, 255, 255, 0.3);
+    transform: rotate(90deg);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 /* 동의 화면 */
 .emotion-consent {
-    padding: var(--space-xl);
+    padding: var(--space-md) var(--space-lg);
     text-align: center;
+    animation: fadeIn 0.4s ease-in;
+    overflow: visible;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 100%;
+    height: 100%;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .consent-icon {
-    font-size: 4rem;
-    margin-bottom: var(--space-md);
+    font-size: 3rem;
+    margin-bottom: var(--space-sm);
+    animation: pulse 2s ease-in-out infinite;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
 }
 
 .emotion-consent h4 {
-    font-size: 1.3rem;
+    font-size: 1.2rem;
     color: var(--text);
-    margin-bottom: var(--space-sm);
+    margin-bottom: var(--space-xs);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
 }
 
 .emotion-consent > p {
     color: var(--text-light);
-    margin-bottom: var(--space-md);
+    margin-bottom: var(--space-sm);
+    line-height: 1.5;
+    font-size: 0.9rem;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    flex-shrink: 0;
 }
 
 .consent-features {
     list-style: none;
     text-align: left;
-    max-width: 280px;
-    margin: 0 auto var(--space-lg);
-    padding: var(--space-md);
-    background: var(--bg);
-    border-radius: var(--radius);
+    max-width: 300px;
+    margin: 0 auto var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: linear-gradient(135deg, var(--bg) 0%, rgba(91, 138, 114, 0.05) 100%);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    flex-shrink: 0;
 }
 
 .consent-features li {
-    padding: var(--space-xs) 0;
+    padding: 3px 0;
     color: var(--text);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.consent-features li::before {
+    content: '✓';
+    color: var(--primary);
+    font-weight: bold;
+    font-size: 1.1rem;
+    margin-right: var(--space-xs);
+    flex-shrink: 0;
 }
 
 .consent-buttons {
     display: flex;
     justify-content: center;
-    gap: var(--space-sm);
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    margin-bottom: var(--space-md);
+    padding-bottom: var(--space-md);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
 }
 
 .consent-btn {
-    padding: var(--space-sm) var(--space-lg);
+    padding: var(--space-md) var(--space-xl);
     border: none;
     border-radius: var(--radius-full);
     font-size: 1rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 140px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+.consent-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.consent-btn:hover::before {
+    width: 300px;
+    height: 300px;
 }
 
 .consent-btn-allow {
-    background: var(--primary);
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
     color: white;
+    border: 2px solid var(--primary);
 }
 
 .consent-btn-allow:hover {
-    background: var(--primary-dark);
-    transform: translateY(-2px);
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+    transform: translateY(-3px);
+    box-shadow: 0 4px 16px rgba(91, 138, 114, 0.4);
+}
+
+.consent-btn-allow:active {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(91, 138, 114, 0.3);
 }
 
 .consent-btn-skip {
-    background: var(--bg);
-    color: var(--text-light);
+    background: var(--surface);
+    color: var(--text);
+    border: 2px solid var(--border);
 }
 
 .consent-btn-skip:hover {
-    background: var(--border);
+    background: var(--bg);
+    border-color: var(--text-light);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.consent-btn-skip:active {
+    transform: translateY(0);
 }
 
 .consent-error {
@@ -151,23 +303,81 @@
     margin-bottom: var(--space-md);
 }
 
-/* 메인 분석 화면 */
+/* 메인 분석 화면 - 가로 레이아웃 (웹캠+감정분포 세로, 감정지표 오른쪽) */
 .emotion-main {
-    padding: var(--space-md);
+    padding: var(--space-xs);
+    padding-bottom: var(--space-sm);
+    animation: slideIn 0.4s ease-out;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    gap: var(--space-xs);
+    align-items: flex-start;
 }
 
-/* 비디오 컨테이너 */
+/* 첫 번째 줄: 웹캠 + 감정 분포 (세로 레이아웃) */
+.emotion-main-row-1 {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    flex: 1;
+    min-height: 0;
+}
+
+/* 두 번째 줄: 감정 지표 */
+.emotion-main-row-2 {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    flex: 0 0 250px;
+    width: 250px;
+    min-width: 250px;
+    max-width: 250px;
+    min-height: 0;
+    height: 100%;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* 비디오 컨테이너 - 세로 레이아웃 상단 */
 .emotion-video-container {
     position: relative;
-    border-radius: var(--radius);
+    width: 100%;
+    aspect-ratio: 4/3;
+    max-height: 250px;
+    min-height: 200px;
+    border-radius: var(--radius-md);
     overflow: hidden;
     background: #000;
-    margin-bottom: var(--space-md);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    border: 2px solid var(--border);
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.emotion-video-container:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    border-color: var(--primary);
 }
 
 #emotion-video {
     width: 100%;
-    height: auto;
+    height: 100%;
+    object-fit: cover;
     display: block;
     transform: scaleX(-1); /* 거울 모드 */
 }
@@ -202,27 +412,45 @@
 /* 현재 감정 뱃지 */
 .current-emotion-badge {
     position: absolute;
-    top: var(--space-sm);
-    right: var(--space-sm);
+    bottom: var(--space-sm);
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
     align-items: center;
     gap: var(--space-xs);
     padding: var(--space-xs) var(--space-sm);
     background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
     border-radius: var(--radius-full);
-    border: 3px solid var(--primary);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    transition: all 0.3s;
+    border: 2px solid var(--primary);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+    z-index: 10;
+    max-width: 90%;
+    white-space: nowrap;
+}
+
+.current-emotion-badge:hover {
+    transform: translateX(-50%) scale(1.05);
+    box-shadow: 0 4px 16px rgba(91, 138, 114, 0.4);
+    background: rgba(255, 255, 255, 0.98);
 }
 
 .current-emotion-badge .emotion-emoji {
-    font-size: 1.5rem;
+    font-size: 1.2rem;
+    line-height: 1;
 }
 
 .current-emotion-badge .emotion-label {
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     font-weight: 600;
     color: var(--text);
+}
+
+.current-emotion-badge .emotion-confidence {
+    font-size: 0.7rem;
+    color: var(--text-light);
+    margin-left: 2px;
 }
 
 /* 프라이버시 오버레이 */
@@ -246,100 +474,204 @@
     font-size: 3rem;
 }
 
-/* 감정 분포 차트 */
+/* 감정 분포 차트 - 세로 레이아웃 하단 */
 .emotion-distribution {
-    margin-bottom: var(--space-md);
+    flex: 1;
+    min-height: 0;
+    padding: var(--space-xs);
+    background: linear-gradient(135deg, var(--bg) 0%, rgba(91, 138, 114, 0.03) 100%);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
 .emotion-distribution h4 {
-    font-size: 0.9rem;
-    color: var(--text-light);
-    margin-bottom: var(--space-sm);
+    font-size: 0.85rem;
+    color: var(--text);
+    margin-bottom: var(--space-xs);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+}
+
+.emotion-distribution h4::before {
+    content: '📊';
+    font-size: 1.2rem;
 }
 
 .emotion-bars {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .emotion-bar-item {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
+    padding: var(--space-xs);
+    border-radius: var(--radius);
+    transition: background 0.2s;
+}
+
+.emotion-bar-item:hover {
+    background: rgba(91, 138, 114, 0.05);
 }
 
 .emotion-bar-emoji {
-    font-size: 1.2rem;
-    width: 28px;
+    font-size: 1.3rem;
+    width: 32px;
     text-align: center;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
 }
 
 .emotion-bar-track {
     flex: 1;
-    height: 12px;
-    background: var(--bg);
+    height: 14px;
+    background: var(--border);
     border-radius: var(--radius-full);
     overflow: hidden;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+    position: relative;
 }
 
 .emotion-bar-fill {
     height: 100%;
     border-radius: var(--radius-full);
-    transition: width 0.3s ease;
-}
-
-.emotion-bar-value {
-    font-size: 0.8rem;
-    color: var(--text-light);
-    width: 36px;
-    text-align: right;
-}
-
-/* 감정 지표 */
-.emotion-metrics {
-    display: grid;
-    gap: var(--space-sm);
-    margin-bottom: var(--space-md);
-    padding: var(--space-md);
-    background: var(--bg);
-    border-radius: var(--radius);
-}
-
-.metric-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-}
-
-.metric-label {
-    font-size: 0.85rem;
-    color: var(--text-light);
-    min-width: 100px;
-}
-
-.metric-bar {
-    flex: 1;
-    height: 8px;
-    background: var(--border);
-    border-radius: var(--radius-full);
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
 }
 
+.emotion-bar-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.emotion-bar-value {
+    font-size: 0.85rem;
+    color: var(--text);
+    width: 40px;
+    text-align: right;
+    font-weight: 600;
+}
+
+/* 감정 지표 - 세로 배치 */
+.emotion-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    width: 100%;
+    padding: var(--space-xs);
+    background: linear-gradient(135deg, var(--surface) 0%, var(--bg) 100%);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    height: 100%;
+}
+
+.metric-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.7rem;
+    min-width: 0; /* flexbox에서 잘림 방지 */
+    overflow: hidden;
+}
+
+.metric-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+    gap: 8px;
+}
+
+.metric-label {
+    font-size: 0.7rem;
+    color: var(--text);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.metric-label::before {
+    content: '📈';
+    font-size: 0.8rem;
+    flex-shrink: 0;
+}
+
+.metric-bar {
+    flex: 1;
+    height: 10px;
+    background: var(--border);
+    border-radius: var(--radius-full);
+    position: relative;
+    overflow: hidden;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
 .metric-fill {
     height: 100%;
-    background: var(--primary);
+    background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%);
     border-radius: var(--radius-full);
-    transition: width 0.3s ease;
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.metric-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    animation: shimmer 2s infinite;
 }
 
 .metric-value {
-    font-size: 0.8rem;
-    color: var(--text);
-    font-weight: 600;
-    min-width: 40px;
+    font-size: 0.75rem;
+    color: var(--primary);
+    font-weight: 700;
     text-align: right;
+    min-width: 60px;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.metric-description {
+    display: none; /* 설명은 툴팁으로만 표시 */
 }
 
 /* Valence 바 (특별 스타일) */
@@ -380,20 +712,38 @@
 
 /* 감정 타임라인 */
 .emotion-timeline {
-    margin-bottom: var(--space-md);
+    display: none; /* 공간 절약을 위해 숨김 */
+    margin-bottom: 0;
+    padding: var(--space-xs);
+    background: linear-gradient(135deg, var(--bg) 0%, rgba(91, 138, 114, 0.03) 100%);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 .emotion-timeline h4 {
-    font-size: 0.9rem;
-    color: var(--text-light);
-    margin-bottom: var(--space-sm);
+    font-size: 1rem;
+    color: var(--text);
+    margin-bottom: var(--space-md);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.emotion-timeline h4::before {
+    content: '📈';
+    font-size: 1.2rem;
 }
 
 .timeline-chart {
-    background: var(--bg);
+    background: var(--surface);
     border-radius: var(--radius);
     padding: var(--space-sm);
-    height: 80px;
+    height: 100px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 #timeline-canvas {
@@ -403,61 +753,116 @@
 
 /* 인사이트 */
 .emotion-insight {
-    display: flex;
+    display: none; /* 공간 절약을 위해 숨김 */
     align-items: flex-start;
-    gap: var(--space-sm);
-    padding: var(--space-md);
-    background: linear-gradient(135deg, rgba(91, 138, 114, 0.1), rgba(232, 178, 152, 0.1));
-    border-radius: var(--radius);
-    margin-bottom: var(--space-md);
+    gap: var(--space-xs);
+    padding: var(--space-xs);
+    background: linear-gradient(135deg, rgba(91, 138, 114, 0.08) 0%, rgba(232, 178, 152, 0.08) 100%);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-xs);
+    border: 1px solid rgba(91, 138, 114, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s;
+}
+
+.emotion-insight:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: rgba(91, 138, 114, 0.3);
 }
 
 .insight-icon {
-    font-size: 1.3rem;
+    font-size: 1.5rem;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+    animation: iconBounce 2s ease-in-out infinite;
+}
+
+@keyframes iconBounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-3px);
+    }
 }
 
 .insight-text {
     font-size: 0.95rem;
     color: var(--text);
-    line-height: 1.5;
+    line-height: 1.6;
+    flex: 1;
 }
 
 /* 컨트롤 버튼 */
 .emotion-controls {
-    display: flex;
-    justify-content: center;
-    gap: var(--space-sm);
+    display: none !important; /* 일시정지/종료 버튼 제거 */
 }
 
 .emotion-btn {
     display: flex;
     align-items: center;
     gap: var(--space-xs);
-    padding: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) var(--space-lg);
     border: none;
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
     font-size: 0.9rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 100px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+.emotion-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.emotion-btn:hover::before {
+    width: 200px;
+    height: 200px;
 }
 
 .emotion-btn-pause {
-    background: var(--accent);
-    color: var(--text);
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+    color: white;
+    border: 2px solid var(--primary);
 }
 
 .emotion-btn-pause:hover {
-    background: #d9a078;
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(91, 138, 114, 0.4);
+}
+
+.emotion-btn-pause:active {
+    transform: translateY(0);
 }
 
 .emotion-btn-stop {
-    background: var(--bg);
-    color: var(--text-light);
-    border: 1px solid var(--border);
+    background: linear-gradient(135deg, var(--danger) 0%, #e85a5a 100%);
+    color: white;
+    border: 2px solid var(--danger);
 }
 
 .emotion-btn-stop:hover {
-    background: var(--border);
+    background: linear-gradient(135deg, #c55a5a 0%, var(--danger) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(217, 123, 123, 0.4);
+}
+
+.emotion-btn-stop:active {
+    transform: translateY(0);
 }
 
 /* 알림 패널 */

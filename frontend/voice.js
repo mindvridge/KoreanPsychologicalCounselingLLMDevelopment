@@ -1,6 +1,6 @@
 /**
  * Voice Chat Module - 실시간 WebSocket 스트리밍
- * 마음챗 음성 상담 시스템
+ * 마브AI 음성 상담 시스템
  */
 
 class VoiceChat {
@@ -551,30 +551,134 @@ class TTSPlayer {
         }
 
         try {
-            const response = await fetch(this.apiUrl, {
+            // TTS 엔진 선택 가져오기 (options에서 우선, 그 다음 UI에서, 마지막으로 로컬 스토리지)
+            let ttsEngine = options.tts_engine || options.ttsEngine;
+            
+            if (!ttsEngine) {
+                // 채팅창 TTS 엔진 선택기 확인
+                const chatTtsSelect = document.getElementById('chat-tts-engine-select');
+                if (chatTtsSelect) {
+                    ttsEngine = chatTtsSelect.value;
+                } else {
+                    // 음성 채팅 TTS 엔진 선택기 확인
+                    const voiceTtsSelect = document.getElementById('tts-engine-select');
+                    if (voiceTtsSelect) {
+                        ttsEngine = voiceTtsSelect.value;
+                    } else {
+                        // 로컬 스토리지에서 가져오기
+                        const savedEngine = localStorage.getItem('tts_engine');
+                        ttsEngine = savedEngine || 'zonos';
+                    }
+                }
+            }
+            
+            // 로컬 스토리지에 저장
+            if (ttsEngine) {
+                localStorage.setItem('tts_engine', ttsEngine);
+                // UI 동기화
+                const chatTtsSelect = document.getElementById('chat-tts-engine-select');
+                const voiceTtsSelect = document.getElementById('tts-engine-select');
+                if (chatTtsSelect) chatTtsSelect.value = ttsEngine;
+                if (voiceTtsSelect) voiceTtsSelect.value = ttsEngine;
+            }
+
+            // TTS API URL 구성 (VOICE_API_BASE_URL 사용 - 포트 8001)
+            const baseUrl = CONFIG.VOICE_API_BASE_URL || 'http://localhost:8001/api/v1';
+            const ttsUrl = `${baseUrl}/tts`;
+            
+            // 스트리밍 모드 (ElevenLabs만 지원, 기본값: false - 비스트리밍으로 시작)
+            const useStreaming = options.stream === true && ttsEngine === 'elevenlabs';
+            
+            console.log('[TTS] 요청 시작:', { ttsEngine, useStreaming, text: text.substring(0, 50) + '...' });
+            
+            // TTS API는 Form 데이터를 사용하므로 FormData로 변경
+            const formData = new FormData();
+            formData.append('text', text);
+            formData.append('voice_profile', options.voiceProfile || this.voiceProfile || '');
+            formData.append('emotion', options.emotion || 'calm');
+            formData.append('tts_engine', ttsEngine);
+            formData.append('stream', useStreaming ? 'true' : 'false');
+
+            console.log('[TTS] API 호출:', ttsUrl, { tts_engine: ttsEngine, stream: useStreaming });
+
+            const response = await fetch(ttsUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    text: text,
-                    voice_profile: options.voiceProfile || this.voiceProfile,
-                    emotion: options.emotion || 'calm',
-                    speed: options.speed || 1.0
-                })
+                body: formData
+            });
+
+            console.log('[TTS] 응답 상태:', response.status, response.statusText);
+            console.log('[TTS] 응답 헤더:', {
+                'X-Streaming': response.headers.get('X-Streaming'),
+                'X-Engine': response.headers.get('X-Engine'),
+                'Content-Type': response.headers.get('Content-Type')
             });
 
             if (!response.ok) {
-                throw new Error('TTS request failed');
+                const errorText = await response.text();
+                console.error('[TTS] API 오류:', response.status, errorText);
+                throw new Error(`TTS request failed: ${errorText}`);
             }
 
-            const audioData = await response.arrayBuffer();
-            this.queue.push(audioData);
+            // 스트리밍 모드인 경우
+            const isStreaming = useStreaming && response.headers.get('X-Streaming') === 'true';
+            console.log('[TTS] 스트리밍 모드:', isStreaming);
+            
+            if (isStreaming) {
+                console.log('[TTS] 스트리밍 오디오 수신 시작');
+                const reader = response.body.getReader();
+                const chunks = [];
+                
+                // 스트림 읽기
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                }
+                
+                console.log('[TTS] 스트리밍 청크 수:', chunks.length);
+                
+                // 청크 합치기
+                const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+                const audioData = new Uint8Array(totalLength);
+                let offset = 0;
+                for (const chunk of chunks) {
+                    audioData.set(chunk, offset);
+                    offset += chunk.length;
+                }
+                
+                console.log('[TTS] 스트리밍 오디오 크기:', totalLength, 'bytes');
+                this.queue.push(audioData.buffer);
+            } else {
+                // 비스트리밍 모드 (기존 방식)
+                console.log('[TTS] 비스트리밍 모드 - JSON 응답 파싱');
+                const responseData = await response.json();
+                console.log('[TTS] 응답 데이터:', { 
+                    engine: responseData.engine, 
+                    streaming: responseData.streaming,
+                    has_audio: !!responseData.audio_base64,
+                    audio_length: responseData.audio_base64 ? responseData.audio_base64.length : 0
+                });
+                
+                // base64 디코딩
+                const audioBase64 = responseData.audio_base64;
+                if (!audioBase64) {
+                    throw new Error('TTS 응답에 오디오 데이터가 없습니다.');
+                }
+                
+                const audioData = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0)).buffer;
+                console.log('[TTS] 오디오 데이터 크기:', audioData.byteLength, 'bytes');
+                this.queue.push(audioData);
+            }
 
+            console.log('[TTS] 재생 큐에 추가 완료, 큐 크기:', this.queue.length);
             if (!this.isPlaying) {
+                console.log('[TTS] 재생 시작');
                 this.playNext();
             }
 
         } catch (error) {
-            console.error('TTS error:', error);
+            console.error('[TTS] 오류 발생:', error);
+            console.error('[TTS] 오류 스택:', error.stack);
             this.onError(error);
         }
     }

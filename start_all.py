@@ -15,6 +15,7 @@ import time
 import signal
 import subprocess
 import threading
+import webbrowser
 from pathlib import Path
 
 # Windows 인코딩 문제 해결
@@ -176,6 +177,37 @@ def setup_environment(gpu_mode):
 
     print(f"  {Colors.GREEN}✓{Colors.ENDC} 환경 설정 완료\n")
 
+def fix_env_encoding_if_needed():
+    """서버 시작 전 .env 파일 인코딩을 UTF-8로 변환"""
+    env_path = PROJECT_ROOT / ".env"
+    if not env_path.exists():
+        return
+    
+    try:
+        # UTF-8로 읽기 시도
+        env_path.read_text(encoding='utf-8')
+        # 이미 UTF-8이면 변환 불필요
+        return
+    except UnicodeDecodeError:
+        # 인코딩 변환 필요
+        print(f"{Colors.WARNING}[인코딩 수정] .env 파일을 UTF-8로 변환 중...{Colors.ENDC}")
+        try:
+            # fix_env_encoding.py 실행
+            result = subprocess.run(
+                [sys.executable, "fix_env_encoding.py"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=str(PROJECT_ROOT)
+            )
+            if result.returncode == 0:
+                print(f"  {Colors.GREEN}✓{Colors.ENDC} .env 파일 인코딩 변환 완료")
+            else:
+                print(f"  {Colors.WARNING}⚠{Colors.ENDC} 변환 실패: {result.stderr}")
+        except Exception as e:
+            print(f"  {Colors.WARNING}⚠{Colors.ENDC} 자동 변환 실패: {e}")
+            print(f"  {Colors.WARNING}수동으로 실행: python fix_env_encoding.py{Colors.ENDC}")
+
 class ServerProcess:
     """서버 프로세스 관리"""
     def __init__(self, name, module, port, host="0.0.0.0"):
@@ -190,13 +222,22 @@ class ServerProcess:
         """서버 시작"""
         def run_server():
             import uvicorn
-            uvicorn.run(
-                self.module,
-                host=self.host,
-                port=self.port,
-                log_level="warning",
-                access_log=False
-            )
+            try:
+                uvicorn.run(
+                    self.module,
+                    host=self.host,
+                    port=self.port,
+                    log_level="warning",
+                    access_log=False
+                )
+            except TypeError as e:
+                if "'NoneType' object is not callable" in str(e):
+                    print(f"\n{Colors.FAIL}✗ {self.name} 서버 시작 실패: app 객체를 찾을 수 없습니다.{Colors.ENDC}")
+                    print(f"{Colors.WARNING}모듈 경로: {self.module}{Colors.ENDC}")
+                    print(f"{Colors.WARNING}해결 방법: src/api/__init__.py에서 app이 제대로 export되는지 확인하세요.{Colors.ENDC}")
+                    raise
+                else:
+                    raise
 
         self.thread = threading.Thread(target=run_server, daemon=True)
         self.thread.start()
@@ -227,7 +268,16 @@ def start_servers():
 
     # 메인 API 서버
     print(f"  메인 API 서버 시작 중 (포트 8000)...", end="", flush=True)
-    main_server = ServerProcess("Main API", "src.api:app", 8000)
+    # src.api:app 사용 (src/api/__init__.py에서 app을 re-export)
+    # 만약 문제가 발생하면 "api:app" 시도
+    # .env 파일 인코딩 문제가 있으면 api.py import가 실패할 수 있으므로
+    # 직접 api:app을 사용하는 것이 더 안전할 수 있습니다
+    try:
+        # 먼저 src.api:app 시도
+        main_server = ServerProcess("Main API", "src.api:app", 8000)
+    except:
+        # 실패하면 api:app 시도
+        main_server = ServerProcess("Main API", "api:app", 8000)
     main_server.start()
 
     if main_server.is_ready(timeout=60):
@@ -282,6 +332,9 @@ def main():
     """메인 실행 함수"""
     print_banner()
 
+    # 0. .env 파일 인코딩 자동 수정
+    fix_env_encoding_if_needed()
+
     # 1. 요구사항 확인
     if not check_requirements():
         print(f"\n{Colors.FAIL}필수 요구사항을 충족하지 못했습니다.{Colors.ENDC}")
@@ -303,6 +356,23 @@ def main():
 
     # 5. 상태 출력
     print_status()
+
+    # 6. 웹 브라우저 자동 열기
+    def open_browser():
+        """서버가 준비되면 웹 브라우저 자동 열기"""
+        # 서버가 완전히 준비될 때까지 대기
+        time.sleep(2)
+        url = "http://localhost:8000"
+        try:
+            webbrowser.open(url)
+            print(f"\n{Colors.GREEN}✓ 브라우저가 열렸습니다: {url}{Colors.ENDC}")
+        except Exception as e:
+            print(f"\n{Colors.WARNING}⚠ 브라우저를 자동으로 열 수 없습니다: {e}{Colors.ENDC}")
+            print(f"  수동으로 열기: {url}")
+
+    # 브라우저 열기 (별도 스레드에서 실행)
+    browser_thread = threading.Thread(target=open_browser, daemon=True)
+    browser_thread.start()
 
     # 종료 시그널 처리
     def signal_handler(sig, frame):

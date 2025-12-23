@@ -1,11 +1,12 @@
 # Core Deep Learning Framework
-torch>=2.0.0
+torch>=2.6.0  # CVE-2025-32434 보안 취약점 해결을 위해 v2.6 이상 필요
 transformers>=4.35.0
 accelerate>=0.24.0
 bitsandbytes>=0.41.0  # 4-bit quantization support
 peft>=0.7.0  # LoRA/QLoRA fine-tuning
 scipy>=1.11.0  # Statistical analysis for A/B testing
 datasets>=2.15.0  # Hugging Face datasets for training
+safetensors>=0.4.0  # 안전한 모델 로딩을 위한 safetensors 지원
 
 # Web Interface
 gradio>=4.0.0
@@ -21,7 +22,9 @@ konlpy>=0.6.0
 
 # Data Processing
 pandas>=2.0.0
-numpy>=1.24.0
+numpy>=1.24.0,<2.0.0  # MediaPipe 호환성을 위해 NumPy 1.x 사용
+Pillow>=10.0.0  # Image processing
+mediapipe>=0.10.0  # 얼굴 랜드마크 감지 및 정확한 감정 분석
 
 # Configuration and Environment
 pyyaml>=6.0
@@ -69,6 +72,7 @@ webrtcvad>=2.0.10  # Voice Activity Detection
 # zonos>=0.1.0  # Zonos TTS (별도 설치 필요)
 TTS>=0.22.0  # Coqui TTS (대체/보조용)
 gTTS>=2.5.0  # Google TTS (폴백용)
+elevenlabs>=1.0.0  # ElevenLabs TTS (고품질 음성 합성)
 
 # Audio Processing
 sounddevice>=0.4.6  # 실시간 오디오 입출력

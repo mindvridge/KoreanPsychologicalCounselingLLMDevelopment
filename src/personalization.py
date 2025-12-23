@@ -139,10 +139,10 @@ class PersonalizationManager:
 
             # 사용자 조회
             user = UserManager.get_user(db, user_id)
-            if not user or not user.metadata:
+            if not user or not user.user_metadata:
                 return
 
-            metadata = user.metadata
+            metadata = user.user_metadata
             updated = False
 
             # 이름 업데이트
@@ -232,10 +232,10 @@ class PersonalizationManager:
         try:
             user = UserManager.get_user(db, user_id)
 
-            if not user or not user.metadata:
+            if not user or not user.user_metadata:
                 return "안녕하세요. 무엇을 도와드릴까요?"
 
-            metadata = user.metadata
+            metadata = user.user_metadata
             preferred_name = metadata.preferred_name or "손님"
 
             if is_new_user:
@@ -276,7 +276,7 @@ class PersonalizationManager:
             if not user:
                 return {}
 
-            metadata = user.metadata if user.metadata else None
+            metadata = user.user_metadata if user.user_metadata else None
 
             # 최근 평가 결과
             recent_assessments = DBAssessmentManager.get_assessment_history(
