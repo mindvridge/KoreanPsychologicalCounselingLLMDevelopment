@@ -377,7 +377,7 @@ body {
     flex: 1;
     min-height: 0;
     margin-bottom: var(--space-xs);
-    overflow: hidden;
+    overflow: visible;
     display: flex;
     flex-direction: column;
 }
