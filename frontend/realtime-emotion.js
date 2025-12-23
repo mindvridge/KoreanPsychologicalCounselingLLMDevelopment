@@ -10,13 +10,13 @@
 const EmotionConfig = {
     // 감정 정의
     emotions: {
-        happy: { label: '행복', emoji: '😊', color: '#22c55e', koLabel: '행복' },
-        sad: { label: '슬픔', emoji: '😢', color: '#3b82f6', koLabel: '슬픔' },
-        angry: { label: '분노', emoji: '😠', color: '#ef4444', koLabel: '분노' },
-        fearful: { label: '두려움', emoji: '😨', color: '#a855f7', koLabel: '두려움' },
-        disgusted: { label: '혐오', emoji: '🤢', color: '#84cc16', koLabel: '혐오' },
-        surprised: { label: '놀람', emoji: '😮', color: '#f59e0b', koLabel: '놀람' },
-        neutral: { label: '중립', emoji: '😐', color: '#6b7280', koLabel: '중립' }
+        happy: { label: '행복', emoji: '😊', color: '#22c55e', koLabel: '행복', enLabel: 'happy' },
+        sad: { label: '슬픔', emoji: '😢', color: '#3b82f6', koLabel: '슬픔', enLabel: 'sad' },
+        angry: { label: '분노', emoji: '😠', color: '#ef4444', koLabel: '분노', enLabel: 'angry' },
+        fearful: { label: '두려움', emoji: '😨', color: '#a855f7', koLabel: '두려움', enLabel: 'fear' },
+        disgusted: { label: '혐오', emoji: '🤢', color: '#84cc16', koLabel: '혐오', enLabel: 'disgust' },
+        surprised: { label: '놀람', emoji: '😮', color: '#f59e0b', koLabel: '놀람', enLabel: 'surprise' },
+        neutral: { label: '중립', emoji: '😐', color: '#6b7280', koLabel: '중립', enLabel: 'neutral' }
     },
 
     // 분석 설정
@@ -501,6 +501,7 @@ class RealtimeEmotionUI {
         return Object.entries(EmotionConfig.emotions).map(([key, emotion]) => `
             <div class="emotion-bar-item" data-emotion="${key}">
                 <span class="emotion-bar-emoji">${emotion.emoji}</span>
+                <span class="emotion-bar-label">${emotion.koLabel} <span class="en-label">(${emotion.enLabel})</span></span>
                 <div class="emotion-bar-track">
                     <div class="emotion-bar-fill" style="background: ${emotion.color}; width: 0%"></div>
                 </div>
@@ -771,9 +772,9 @@ class RealtimeEmotionUI {
             const emojiEl = badge.querySelector('.emotion-emoji');
             const labelEl = badge.querySelector('.emotion-label');
             const confidenceEl = badge.querySelector('.emotion-confidence');
-            
+
             if (emojiEl) emojiEl.textContent = emotionInfo.emoji;
-            if (labelEl) labelEl.textContent = emotionInfo.koLabel;
+            if (labelEl) labelEl.innerHTML = `${emotionInfo.koLabel} <span class="en-label">(${emotionInfo.enLabel})</span>`;
             if (confidenceEl) confidenceEl.textContent = `신뢰도 (confidence): ${Math.round(confidence * 100)}%`;
             badge.style.borderColor = emotionInfo.color;
         }
