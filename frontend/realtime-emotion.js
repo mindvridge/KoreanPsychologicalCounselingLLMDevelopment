@@ -436,38 +436,41 @@ class RealtimeEmotionUI {
                         </div>
                     </div>
 
-                    <!-- 감정 지표 (오른쪽 세로 배치) -->
+                    <!-- 감정 지표 (세로 배치) -->
                     <div class="emotion-main-row-2">
                         <div class="emotion-metrics">
-                        <div class="metric-item" title="감정의 긍정/부정 정도 (Valence)">
-                            <div class="metric-header">
-                                <span class="metric-label">감정가</span>
-                                <span class="metric-value" id="valence-value">중립</span>
+                            <h4>감정 지표</h4>
+                            <div class="metric-item" title="감정의 긍정/부정 정도 (Valence)">
+                                <div class="metric-header">
+                                    <span class="metric-label">😊 감정가</span>
+                                    <span class="metric-value" id="valence-value">중립</span>
+                                </div>
+                                <div class="metric-bar valence-bar">
+                                    <div class="metric-indicator" id="valence-indicator" style="left: 50%"></div>
+                                </div>
+                                <div class="valence-labels">
+                                    <span class="metric-negative">부정</span>
+                                    <span class="metric-positive">긍정</span>
+                                </div>
                             </div>
-                            <div class="metric-bar valence-bar">
-                                <div class="metric-indicator" id="valence-indicator"></div>
-                                <span class="metric-negative">부정</span>
-                                <span class="metric-positive">긍정</span>
+                            <div class="metric-item" title="감정의 활성화 정도 (Arousal)">
+                                <div class="metric-header">
+                                    <span class="metric-label">⚡ 각성도</span>
+                                    <span class="metric-value" id="arousal-value">0%</span>
+                                </div>
+                                <div class="metric-bar arousal-bar">
+                                    <div class="metric-fill" id="arousal-fill"></div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="metric-item" title="감정의 활성화 정도 (Arousal)">
-                            <div class="metric-header">
-                                <span class="metric-label">각성도</span>
-                                <span class="metric-value" id="arousal-value">0%</span>
+                            <div class="metric-item" title="상담에 대한 참여 정도 (Engagement)">
+                                <div class="metric-header">
+                                    <span class="metric-label">🎯 참여도</span>
+                                    <span class="metric-value" id="engagement-value">0%</span>
+                                </div>
+                                <div class="metric-bar engagement-bar">
+                                    <div class="metric-fill" id="engagement-fill"></div>
+                                </div>
                             </div>
-                            <div class="metric-bar arousal-bar">
-                                <div class="metric-fill" id="arousal-fill"></div>
-                            </div>
-                        </div>
-                        <div class="metric-item" title="상담에 대한 참여 정도 (Engagement)">
-                            <div class="metric-header">
-                                <span class="metric-label">참여도</span>
-                                <span class="metric-value" id="engagement-value">0%</span>
-                            </div>
-                            <div class="metric-bar engagement-bar">
-                                <div class="metric-fill" id="engagement-fill"></div>
-                            </div>
-                        </div>
                         </div>
                     </div>
 
