@@ -24,6 +24,7 @@ from src.assessments import AssessmentManager, PHQ9Assessment, GAD7Assessment, K
 from src.rag_system import MentalHealthRAG
 from src.monitoring import ProductionMonitor, init_monitor
 from src.logging_system import ConversationLogger, init_conversation_logger
+from src.prompts import PromptTemplate
 
 # Setup logging
 logging.basicConfig(
@@ -70,6 +71,10 @@ class IntegratedMentalHealthSystem:
         self.rag_system: Optional[MentalHealthRAG] = None
         self.monitor: Optional[ProductionMonitor] = None
         self.logger: Optional[ConversationLogger] = None
+
+        # Prompt template for system context
+        persona_name = self.config.get("persona", {}).get("name", "마음이")
+        self.prompt_template = PromptTemplate(persona_name=persona_name)
 
         # System state
         self.is_initialized = False
@@ -494,7 +499,8 @@ class IntegratedMentalHealthSystem:
                     system_context = self._build_system_context(
                         emotion_result=emotion_result,
                         crisis_result=crisis_result,
-                        rag_context=rag_context
+                        rag_context=rag_context,
+                        conversation_history=conversation_history
                     )
 
                     # OpenAI API는 다른 인터페이스를 사용
@@ -638,15 +644,21 @@ class IntegratedMentalHealthSystem:
         self,
         emotion_result: Optional[Dict],
         crisis_result: Optional[Dict],
-        rag_context: str
+        rag_context: str,
+        conversation_history: Optional[List[Dict]] = None
     ) -> str:
-        """Build system context for LLM"""
-        context_parts = [
-            "당신은 한국 정신건강 상담 AI입니다.",
-            "공감적이고 전문적으로 응답하세요.",
-            "의료 진단이나 처방은 하지 마세요."
-        ]
+        """
+        Build system context for LLM using PromptTemplate
 
+        Uses the enhanced PromptTemplate to generate comprehensive system context
+        with RAG-augmented knowledge for reducing hallucination.
+        """
+        # Build context dict for PromptTemplate
+        context = {
+            "turn_count": len(conversation_history) if conversation_history else 0
+        }
+
+        # Extract emotion information
         if emotion_result and isinstance(emotion_result, dict):
             try:
                 primary_emotion = emotion_result.get("primary_emotion")
@@ -656,23 +668,40 @@ class IntegratedMentalHealthSystem:
                     else:
                         emotion_name = str(primary_emotion)
                     if emotion_name:
-                        context_parts.append(f"내담자의 주 감정: {emotion_name}")
+                        context["emotion"] = emotion_name
+
+                # Add intensity if available
+                intensity = emotion_result.get("intensity")
+                if intensity:
+                    context["emotion_intensity"] = intensity
             except Exception as e:
                 logger.warning(f"Error extracting emotion from result: {e}")
 
+        # Add crisis level
         if crisis_result and isinstance(crisis_result, dict):
             try:
                 risk_level = crisis_result.get("overall_risk_level")
-                if risk_level in [RiskLevel.MODERATE, RiskLevel.HIGH]:
-                    context_parts.append("주의: 위기 징후 감지됨. 신중하게 대응하세요.")
+                if risk_level:
+                    # Convert RiskLevel to float for crisis_level
+                    risk_mapping = {
+                        RiskLevel.NONE: 0.0,
+                        RiskLevel.LOW: 0.3,
+                        RiskLevel.MODERATE: 0.5,
+                        RiskLevel.HIGH: 0.8,
+                        RiskLevel.CRITICAL: 1.0
+                    }
+                    context["crisis_level"] = risk_mapping.get(risk_level, 0.0)
             except Exception as e:
                 logger.warning(f"Error extracting crisis level: {e}")
 
+        # Add RAG context (심리상담 매뉴얼/CBT 프로토콜 참조)
         if rag_context:
-            context_parts.append("\n--- 참고 자료 ---")
-            context_parts.append(rag_context)
+            context["rag_context"] = rag_context
 
-        return "\n".join(context_parts)
+        # Generate system prompt using PromptTemplate
+        system_prompt = self.prompt_template.get_system_prompt(context)
+
+        return system_prompt
 
     def _get_crisis_response(self, crisis_result: Dict) -> str:
         """Get emergency response for high crisis situations"""

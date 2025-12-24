@@ -1138,6 +1138,52 @@ class MentalHealthRAG:
 
         return context
 
+    @property
+    def is_indexed(self) -> bool:
+        """
+        지식 베이스 인덱싱 여부
+
+        Returns:
+            bool: 인덱싱 완료 여부
+        """
+        return len(self.vector_store.documents) > 0
+
+    def get_augmented_context(
+        self,
+        query: str,
+        max_results: int = 3,
+        conversation_history: Optional[List[Dict]] = None
+    ) -> str:
+        """
+        증강된 컨텍스트 획득 (augment 메서드의 별칭)
+
+        Args:
+            query: 검색 쿼리
+            max_results: 최대 결과 수
+            conversation_history: 대화 이력
+
+        Returns:
+            str: 증강된 컨텍스트
+        """
+        return self.augment(
+            query=query,
+            conversation_history=conversation_history,
+            k=max_results
+        )
+
+    def search(self, query: str, k: int = 5) -> List[SearchResult]:
+        """
+        검색 (retrieve 메서드의 별칭)
+
+        Args:
+            query: 검색 쿼리
+            k: 결과 수
+
+        Returns:
+            List[SearchResult]: 검색 결과
+        """
+        return self.retrieve(query, k=k, search_type="hybrid")
+
     def get_stats(self) -> Dict:
         """
         시스템 통계
