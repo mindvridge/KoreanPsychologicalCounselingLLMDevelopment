@@ -634,7 +634,7 @@ class IntegratedMentalHealthSystem:
         mapping = {
             RiskLevel.NONE: 0,
             RiskLevel.LOW: 1,
-            RiskLevel.MODERATE: 2,
+            RiskLevel.MEDIUM: 2,
             RiskLevel.HIGH: 3,
             RiskLevel.CRITICAL: 4
         }
@@ -686,7 +686,7 @@ class IntegratedMentalHealthSystem:
                     risk_mapping = {
                         RiskLevel.NONE: 0.0,
                         RiskLevel.LOW: 0.3,
-                        RiskLevel.MODERATE: 0.5,
+                        RiskLevel.MEDIUM: 0.5,
                         RiskLevel.HIGH: 0.8,
                         RiskLevel.CRITICAL: 1.0
                     }

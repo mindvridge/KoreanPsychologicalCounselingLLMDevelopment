@@ -105,7 +105,7 @@ class TestCompleteConversationFlow:
                     }
                 else:
                     return {
-                        "overall_risk_level": RiskLevel.MODERATE,
+                        "overall_risk_level": RiskLevel.MEDIUM,
                         "requires_immediate_intervention": False,
                         "recommended_actions": []
                     }

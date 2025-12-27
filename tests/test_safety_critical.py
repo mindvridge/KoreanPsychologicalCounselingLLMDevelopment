@@ -81,7 +81,7 @@ class TestSuicideDetection:
         result = crisis_evaluator.evaluate_crisis(suicide_phrase, [])
 
         assert result is not None, f"결과가 None입니다: '{suicide_phrase}'"
-        assert result["overall_risk_level"] in [RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.CRITICAL], \
+        assert result["overall_risk_level"] in [RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL], \
             f"위험 수준이 너무 낮습니다: {result['overall_risk_level']} for '{suicide_phrase}'"
         assert result["requires_immediate_intervention"], \
             f"즉각 개입이 필요하지만 False입니다: '{suicide_phrase}'"
@@ -155,7 +155,7 @@ class TestSuicideDetection:
 
             assert result is not None
             # 은유적 표현도 최소 MODERATE 이상
-            assert result["overall_risk_level"] in [RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.CRITICAL], \
+            assert result["overall_risk_level"] in [RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL], \
                 f"은유적 표현이 감지되지 않음: {result['overall_risk_level']} for '{phrase}'"
 
 
@@ -188,7 +188,7 @@ class TestSelfHarmDetection:
         result = crisis_evaluator.evaluate_crisis(self_harm_phrase, [])
 
         assert result is not None
-        assert result["overall_risk_level"] in [RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.CRITICAL], \
+        assert result["overall_risk_level"] in [RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL], \
             f"자해 행동이 감지되지 않음: {result['overall_risk_level']}"
         assert result["requires_immediate_intervention"]
 
@@ -198,7 +198,7 @@ class TestSelfHarmDetection:
         result = crisis_evaluator.evaluate_crisis(urge_phrase, [])
 
         assert result is not None
-        assert result["overall_risk_level"] in [RiskLevel.LOW, RiskLevel.MODERATE, RiskLevel.HIGH], \
+        assert result["overall_risk_level"] in [RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH], \
             f"자해 충동이 감지되지 않음: {result['overall_risk_level']}"
 
 
@@ -223,7 +223,7 @@ class TestHarmToOthersDetection:
         result = crisis_evaluator.evaluate_crisis(harm_phrase, [])
 
         assert result is not None
-        assert result["overall_risk_level"] in [RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.CRITICAL], \
+        assert result["overall_risk_level"] in [RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL], \
             f"타해 의도가 감지되지 않음: {result['overall_risk_level']}"
         assert result["requires_immediate_intervention"]
 
@@ -274,7 +274,7 @@ class TestRiskLevelClassification:
 
         for phrase in moderate_risk_phrases:
             result = crisis_evaluator.evaluate_crisis(phrase, [])
-            assert result["overall_risk_level"] in [RiskLevel.LOW, RiskLevel.MODERATE, RiskLevel.HIGH], \
+            assert result["overall_risk_level"] in [RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH], \
                 f"중등도 위험 분류 오류: {result['overall_risk_level']}"
 
     def test_high_risk_level(self, crisis_evaluator):
@@ -287,7 +287,7 @@ class TestRiskLevelClassification:
 
         for phrase in high_risk_phrases:
             result = crisis_evaluator.evaluate_crisis(phrase, [])
-            assert result["overall_risk_level"] in [RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.CRITICAL], \
+            assert result["overall_risk_level"] in [RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL], \
                 f"높은 위험이 낮게 감지됨: {result['overall_risk_level']}"
 
     def test_critical_risk_level(self, crisis_evaluator):
@@ -355,7 +355,7 @@ class TestEmergencyResponse:
             for action in actions
         )
 
-        if result["overall_risk_level"] in [RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.CRITICAL]:
+        if result["overall_risk_level"] in [RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL]:
             assert has_professional_referral, "전문가 연계 권장이 누락됨"
 
 
@@ -403,7 +403,7 @@ class TestContextAnalysis:
         risk_order = {
             RiskLevel.NONE: 0,
             RiskLevel.LOW: 1,
-            RiskLevel.MODERATE: 2,
+            RiskLevel.MEDIUM: 2,
             RiskLevel.HIGH: 3,
             RiskLevel.CRITICAL: 4
         }
@@ -496,7 +496,7 @@ class TestSystemReliability:
 
         assert result is not None, "긴 입력 처리 실패"
         # 핵심 위기 표현이 감지되어야 함
-        assert result["overall_risk_level"] in [RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.CRITICAL], \
+        assert result["overall_risk_level"] in [RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL], \
             "긴 텍스트에서 위기 표현 감지 실패"
 
     def test_special_characters_handling(self, crisis_evaluator):
@@ -511,7 +511,7 @@ class TestSystemReliability:
         for phrase in special_phrases:
             result = crisis_evaluator.evaluate_crisis(phrase, [])
             assert result is not None, f"특수문자 처리 실패: '{phrase}'"
-            assert result["overall_risk_level"] in [RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.CRITICAL], \
+            assert result["overall_risk_level"] in [RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL], \
                 f"특수문자로 인해 감지 실패: '{phrase}'"
 
 
@@ -527,9 +527,9 @@ class TestIntegrationScenarios:
         완전한 위기 시나리오: 우울 → 자살 생각 → 구체적 계획
         """
         scenario = [
-            ("우울해요", [RiskLevel.LOW, RiskLevel.MODERATE]),
-            ("2주째 아무것도 못하고 있어요", [RiskLevel.LOW, RiskLevel.MODERATE]),
-            ("죽고 싶다는 생각이 들어요", [RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.CRITICAL]),
+            ("우울해요", [RiskLevel.LOW, RiskLevel.MEDIUM]),
+            ("2주째 아무것도 못하고 있어요", [RiskLevel.LOW, RiskLevel.MEDIUM]),
+            ("죽고 싶다는 생각이 들어요", [RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL]),
             ("오늘 자살할 계획이에요", [RiskLevel.HIGH, RiskLevel.CRITICAL]),
         ]
 

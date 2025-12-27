@@ -623,44 +623,113 @@ class HybridSearchEngine:
     의미적 검색과 키워드 검색을 결합하여 최적의 결과를 제공합니다.
     """
 
-    def __init__(self, vector_store: VectorStoreManager):
+    def __init__(self, vector_store: VectorStoreManager, cache_size: int = 100):
         """
         초기화
 
         Args:
             vector_store: 벡터 스토어 관리자
+            cache_size: 검색 결과 캐시 크기
         """
         self.vector_store = vector_store
 
-        # 한국어 동의어 사전
+        # 검색 결과 캐시 (LRU 캐시 시뮬레이션)
+        self._cache: Dict[str, List[SearchResult]] = {}
+        self._cache_order: List[str] = []
+        self._cache_size = cache_size
+
+        # 한국어 동의어 사전 (확장)
         self.korean_synonyms = {
-            "우울": ["우울증", "우울감", "침울", "기분저하"],
-            "불안": ["불안감", "초조", "긴장", "걱정"],
-            "치료": ["치료법", "요법", "테라피", "상담"],
-            "CBT": ["인지행동치료", "인지치료", "행동치료"],
-            "ACT": ["수용전념치료", "수용치료"],
-            "마음챙김": ["명상", "mindfulness", "마인드풀니스"]
+            # 감정 상태
+            "우울": ["우울증", "우울감", "침울", "기분저하", "무기력", "슬픔"],
+            "불안": ["불안감", "초조", "긴장", "걱정", "두려움", "공포"],
+            "분노": ["화", "짜증", "분개", "격분", "적대감"],
+            "스트레스": ["압박감", "긴장감", "부담", "피로", "탈진"],
+            "외로움": ["고독", "소외감", "고립감", "외톨이"],
+            "죄책감": ["자책", "후회", "양심의 가책"],
+            "수치심": ["부끄러움", "창피함", "체면"],
+
+            # 치료 기법
+            "치료": ["치료법", "요법", "테라피", "상담", "심리치료"],
+            "CBT": ["인지행동치료", "인지치료", "행동치료", "인지행동요법"],
+            "ACT": ["수용전념치료", "수용치료", "수용전념요법"],
+            "DBT": ["변증법적행동치료", "변증법치료", "다이어렉티컬"],
+            "마음챙김": ["명상", "mindfulness", "마인드풀니스", "현재집중"],
+
+            # 정신건강 상태
+            "번아웃": ["소진", "탈진", "직무소진", "burnout"],
+            "PTSD": ["외상후스트레스", "트라우마", "외상", "정신적외상"],
+            "공황": ["공황장애", "패닉", "panic", "공황발작"],
+            "강박": ["강박증", "OCD", "강박장애", "강박사고"],
+
+            # 상황/맥락
+            "직장": ["회사", "업무", "일", "직업", "직무"],
+            "가족": ["부모", "부모님", "자녀", "배우자", "가정"],
+            "대인관계": ["인간관계", "관계", "사회적관계", "교우관계"],
+
+            # 위기 관련
+            "자살": ["자살사고", "자살충동", "극단적선택", "생을마감"],
+            "자해": ["자상", "자해행동", "자기손상"],
+            "위기": ["위기상황", "응급", "긴급", "critical"]
         }
+
+    def _get_cache_key(self, query: str, k: int) -> str:
+        """캐시 키 생성"""
+        return f"{query}::{k}"
+
+    def _get_from_cache(self, cache_key: str) -> Optional[List[SearchResult]]:
+        """캐시에서 결과 조회"""
+        if cache_key in self._cache:
+            # LRU 업데이트
+            self._cache_order.remove(cache_key)
+            self._cache_order.append(cache_key)
+            return self._cache[cache_key]
+        return None
+
+    def _add_to_cache(self, cache_key: str, results: List[SearchResult]):
+        """캐시에 결과 저장"""
+        # 캐시 크기 제한
+        if len(self._cache) >= self._cache_size:
+            oldest_key = self._cache_order.pop(0)
+            del self._cache[oldest_key]
+
+        self._cache[cache_key] = results
+        self._cache_order.append(cache_key)
+
+    def clear_cache(self):
+        """캐시 초기화"""
+        self._cache.clear()
+        self._cache_order.clear()
 
     def hybrid_search(
         self,
         query: str,
         k: int = 5,
         semantic_weight: float = 0.6,
-        keyword_weight: float = 0.4
+        keyword_weight: float = 0.4,
+        use_cache: bool = True
     ) -> List[SearchResult]:
         """
-        하이브리드 검색
+        하이브리드 검색 (캐싱 지원)
 
         Args:
             query: 검색 쿼리
             k: 반환할 결과 수
             semantic_weight: 의미적 검색 가중치
             keyword_weight: 키워드 검색 가중치
+            use_cache: 캐시 사용 여부
 
         Returns:
             List[SearchResult]: 검색 결과
         """
+        # 캐시 확인
+        cache_key = self._get_cache_key(query, k)
+        if use_cache:
+            cached_results = self._get_from_cache(cache_key)
+            if cached_results is not None:
+                logger.debug(f"Cache hit for query: {query[:30]}...")
+                return cached_results
+
         # 동의어 확장
         expanded_query = self.expand_korean_synonyms(query)
 
@@ -678,7 +747,13 @@ class HybridSearchEngine:
             keyword_weight
         )
 
-        return merged[:k]
+        results = merged[:k]
+
+        # 캐시 저장
+        if use_cache:
+            self._add_to_cache(cache_key, results)
+
+        return results
 
     def expand_korean_synonyms(self, query: str) -> str:
         """

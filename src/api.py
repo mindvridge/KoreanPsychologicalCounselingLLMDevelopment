@@ -377,12 +377,32 @@ except Exception as e:
     logger.warning(f"오류 상세: {type(e).__name__}: {str(e)}", exc_info=True)
 
 # CORS Configuration
+# 보안 강화: 환경변수 기반 CORS 설정
+_cors_origins_raw = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000")
+_cors_origins = [origin.strip() for origin in _cors_origins_raw.split(",") if origin.strip()]
+
+# 개발 모드 체크 (DEBUG 환경변수 또는 localhost만 허용)
+_is_development = os.getenv("DEBUG", "false").lower() == "true"
+
+# allow_credentials=True와 allow_origins=["*"]는 CORS 명세 위반
+# 프로덕션에서는 명시적 도메인 지정 필요
+if "*" in _cors_origins:
+    if not _is_development:
+        logger.warning(
+            "⚠️ CORS: allow_origins='*'는 프로덕션 환경에서 권장되지 않습니다. "
+            "ALLOWED_ORIGINS 환경변수에 허용할 도메인을 명시하세요."
+        )
+    # wildcard일 때는 credentials를 False로 설정 (CORS 명세)
+    _allow_credentials = False
+else:
+    _allow_credentials = True
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "*").split(","),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_credentials=_allow_credentials,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-Session-ID"],
 )
 
 # Static files (Frontend)
@@ -1121,6 +1141,22 @@ async def chat(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Internal server error: {str(e)}"
         )
+
+
+# Non-versioned endpoint alias for backward compatibility (Frontend compatibility)
+@app.post("/chat", response_model=ChatResponse, tags=["Chat"], include_in_schema=False)
+@limiter.limit("100/minute")
+async def chat_alias(
+    request: Request,
+    chat_request: ChatRequest,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Non-versioned chat endpoint (alias for /api/v1/chat)
+
+    Provides backward compatibility for clients using /chat instead of /api/v1/chat
+    """
+    return await chat(request, chat_request, authenticated)
 
 
 @app.get("/api/v1/session/{session_id}", response_model=SessionResponse, tags=["Session"])

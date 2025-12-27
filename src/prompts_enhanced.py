@@ -33,12 +33,12 @@ class ConversationPhase(Enum):
 
 
 class RiskLevel(Enum):
-    """위험 수준"""
-    NONE = 0
-    LOW = 1
-    MODERATE = 2
-    HIGH = 3
-    CRISIS = 4
+    """위험 수준 (safety_system_v2.py와 호환)"""
+    NONE = "NONE"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
 
 
 class TherapeuticTechnique(Enum):
@@ -513,13 +513,13 @@ AI로서 한계가 있을 때:
         for crisis_type, keywords in CRISIS_KEYWORDS.items():
             for keyword in keywords:
                 if keyword in message_lower:
-                    return RiskLevel.CRISIS, crisis_type
+                    return RiskLevel.CRITICAL, crisis_type
 
         # 추가적인 위험 신호
         moderate_signals = ["힘들어", "지쳐", "무기력", "불안", "우울"]
         for signal in moderate_signals:
             if signal in message_lower:
-                return RiskLevel.MODERATE, "emotional_distress"
+                return RiskLevel.MEDIUM, "emotional_distress"
 
         return RiskLevel.NONE, ""
 

@@ -91,14 +91,19 @@ class APIClient {
     }
 
     // Chat Endpoints
-    async sendChatMessage(message, sessionId, userId = null) {
+    async sendChatMessage(message, sessionId, userId = null, conversationHistory = null) {
+        // 표준화된 API 요청 (ChatRequest 스키마 준수)
+        const requestBody = {
+            message: message,
+            session_id: sessionId,
+            user_id: userId,
+            conversation_history: conversationHistory || [],
+            consent: true  // 데이터 저장 동의
+        };
+
         return this.request('/chat', {
             method: 'POST',
-            body: JSON.stringify({
-                message: message,
-                session_id: sessionId,
-                user_id: userId
-            })
+            body: JSON.stringify(requestBody)
         });
     }
 
@@ -572,10 +577,17 @@ function setupChatEventListeners() {
         const thinkingMessageId = addThinkingMessage();
         
         try {
+            // 대화 이력을 API 형식으로 변환 (최근 10개)
+            const conversationHistory = AppState.chatHistory.slice(-10).map(msg => ({
+                role: msg.type === 'user' ? 'user' : 'assistant',
+                content: msg.content
+            }));
+
             const response = await api.sendChatMessage(
                 message,
                 AppState.currentSession.id,
-                AppState.userId
+                AppState.userId,
+                conversationHistory
             );
 
             // "생각중" 메시지 제거
